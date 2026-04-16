@@ -108,7 +108,7 @@ export const PaymentTermsDropdown = ({
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex h-9 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-sm text-gray-700 shadow-none outline-none transition-[border-color,box-shadow,transform,background-color] duration-200 ease-out hover:border-slate-400 focus:border-[#3b82f6] focus:ring-[3px] focus:ring-[#3b82f6]/15 focus:-translate-y-[1px]"
+        className="flex h-9 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-sm text-gray-700 shadow-none outline-none transition-[border-color,box-shadow,transform,background-color] duration-200 ease-out hover:border-slate-400 focus:border-[#156372] focus:ring-[3px] focus:ring-[#156372]/15 focus:-translate-y-[1px]"
       >
         <span className="truncate text-left">{selected?.label || placeholder}</span>
         <ChevronDown
@@ -125,7 +125,7 @@ export const PaymentTermsDropdown = ({
             style={menuStyle}
           >
           <div className="border-b border-gray-100 p-2">
-            <div className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 transition-[border-color,box-shadow,background-color] duration-200 focus-within:border-[#3b82f6] focus-within:ring-[3px] focus-within:ring-[#3b82f6]/15 focus-within:bg-white">
+            <div className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 transition-[border-color,box-shadow,background-color] duration-200 focus-within:border-[#156372] focus-within:ring-[3px] focus-within:ring-[#156372]/15 focus-within:bg-white">
               <Search size={15} className="text-gray-400" />
               <input
                 ref={searchInputRef}
@@ -152,14 +152,14 @@ export const PaymentTermsDropdown = ({
                     onMouseLeave={() => setActiveTermValue("")}
                     className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm transition-colors ${
                       isSelected
-                        ? "bg-[#4a8df0] font-medium text-white"
+                        ? "border border-[#156372]/25 bg-white font-medium text-[#156372]"
                         : isActive
-                          ? "border border-[#2b2b2b] bg-white text-gray-700"
-                          : "border border-transparent text-gray-700 hover:bg-gray-50"
+                          ? "border border-[#156372]/20 bg-white text-gray-700"
+                          : "border border-transparent text-gray-700 hover:text-[#156372]"
                     }`}
                   >
                     <span className="truncate">{term.label}</span>
-                    {isSelected && <Check size={16} className="shrink-0" />}
+                    {isSelected && <Check size={16} className="shrink-0 text-[#156372]" />}
                   </button>
                 );
               })
@@ -177,7 +177,7 @@ export const PaymentTermsDropdown = ({
                   setSearchQuery("");
                   onConfigureTerms();
                 }}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-[#4a61ff] hover:bg-gray-50"
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-[#156372] hover:bg-gray-50"
               >
                 <Settings size={15} />
                 <span>Configure Terms</span>

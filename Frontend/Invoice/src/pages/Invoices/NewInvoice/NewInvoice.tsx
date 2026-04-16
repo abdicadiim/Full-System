@@ -236,6 +236,7 @@ const customerTotalPages = 1;
 const customerPaginatedResults: any[] = [];
 const [saveLoading, setSaveLoading] = useState<null | "draft" | "send">(null);
 const [scanInput, setScanInput] = useState("");
+const [isSimplifiedView, setIsSimplifiedView] = useState(false);
 const documentSearch = "";
 const [bulkAddSearch, setBulkAddSearch] = useState("");
 const [bulkAccountSearch, setBulkAccountSearch] = useState("");
@@ -303,6 +304,8 @@ const isDocumentsModalOpen = false;
 const [isDueDatePickerOpen, setIsDueDatePickerOpen] = useState(false);
 const [isInvoiceDatePickerOpen, setIsInvoiceDatePickerOpen] = useState(false);
 const [isInvoiceNumberModalOpen, setIsInvoiceNumberModalOpen] = useState(false);
+const [isWarehouseLocationDropdownOpen, setIsWarehouseLocationDropdownOpen] = useState(false);
+const [openReportingTagDropdownKey, setOpenReportingTagDropdownKey] = useState<string | null>(null);
 const [isManageSalespersonsOpen, setIsManageSalespersonsOpen] = useState(false);
 const isNewCustomerQuickActionOpen = false;
 const [isNewItemModalOpen, setIsNewItemModalOpen] = useState(false);
@@ -314,16 +317,26 @@ const isReloadingCustomerFrame = false;
 const [isSalespersonDropdownOpen, setIsSalespersonDropdownOpen] = useState(false);
 const [isScanModeOpen, setIsScanModeOpen] = useState(false);
 const [isShippingTaxDropdownOpen, setIsShippingTaxDropdownOpen] = useState(false);
-const isTaxExclusiveDropdownOpen = false;
+const [isTaxExclusiveDropdownOpen, setIsTaxExclusiveDropdownOpen] = useState(false);
 const [isAttachmentCountOpen, setIsAttachmentCountOpen] = useState(false);
 const showNewHeaderInput = false;
 const hasAppliedBaseCurrencyRef = useRef(false);
 const [itemsWithAdditionalInfo, setItemsWithAdditionalInfo] = useState<Set<any>>(new Set());
 const additionalInfoMenuRef = useRef<HTMLDivElement | null>(null);
+const warehouseLocationDropdownRef = useRef<HTMLDivElement | null>(null);
+const reportingTagDropdownRef = useRef<HTMLDivElement | null>(null);
 const newHeaderItemId = null as any;
 const newHeaderText = "";
-const newItemImage = null as any;
-const newItemData: any = { name: "", sku: "", sellingPrice: "", costPrice: "", unit: "", description: "", tax: "" };
+const [newItemImage, setNewItemImage] = useState<string | null>(null);
+const [newItemData, setNewItemData] = useState<any>({
+  name: "",
+  sellingPrice: "",
+  type: "Goods",
+  unit: "",
+  salesTax: "",
+  description: "",
+});
+const [newItemErrors, setNewItemErrors] = useState<Record<string, string>>({});
 const newTaxData: any = { name: "", rate: "", isCompound: false };
 const [newSalespersonData, setNewSalespersonData] = useState<any>({ name: "", email: "" });
 const newContactPersonData: any = { firstName: "", lastName: "", email: "", mobile: "" };
@@ -338,6 +351,12 @@ const [itemSearches, setItemSearches] = useState<Record<string, string>>({});
 const isCustomerActive = (customer: any) => {
   const status = String(customer?.status || customer?.customerStatus || customer?.state || "active").toLowerCase();
   return status !== "inactive";
+};
+const isItemActive = (item: any) => {
+  const status = String(item?.status || item?.itemStatus || item?.state || "active").toLowerCase();
+  if (status === "inactive") return false;
+  if (item?.active === false || item?.isActive === false) return false;
+  return true;
 };
 const filteredCustomers = customers.filter((customer) => {
   if (!isCustomerActive(customer)) return false;
@@ -702,8 +721,6 @@ const setIsPaymentModeDropdownOpen = noop;
 const setIsRefreshingCustomersQuickAction = noop;
 const setIsReloadingCustomerFrame = noop;
 
-const setIsTaxExclusiveDropdownOpen = noop;
-
 useEffect(() => {
   if (!isEditMode || !id) return;
   let active = true;
@@ -900,7 +917,15 @@ const setCurrentItemRowId = noop;
 const setCustomerQuickActionFrameKey = noop;
 const setOpenItemMenuId = noop;
 const togglePaymentTermsDropdown = noop;
-const openCustomerQuickAction = noop;
+const openCustomerQuickAction = () => {
+  setIsCustomerDropdownOpen(false);
+  navigate("/sales/customers/new", {
+    state: {
+      returnTo: "/sales/invoices/new",
+      from: "invoice-form",
+    },
+  });
+};
 const reloadCustomersForInvoice = asyncNoop;
 const tryAutoSelectNewCustomerFromQuickAction = asyncNoop;
 const handleAddBulkItems = noop;
@@ -908,7 +933,19 @@ const handleBulkItemQuantityChange = noop;
 const handleBulkItemToggle = noop;
 const handleCancelBulkAdd = noop;
 const handleCancelContactPerson = noop;
-const handleCancelNewItem = noop;
+const handleCancelNewItem = () => {
+  setNewItemErrors({});
+  setNewItemData({
+    name: "",
+    sellingPrice: "",
+    type: "Goods",
+    unit: "",
+    salesTax: "",
+    description: "",
+  });
+  setNewItemImage(null);
+  setIsNewItemModalOpen(false);
+};
 const handleCancelNewTax = noop;
 const handleChange = (e: any) => {
   const { name, value, type, checked } = e.target;
@@ -983,8 +1020,26 @@ const handleEditSalesperson = (salesperson: any) => {
     state: { returnTo: isEditMode ? `/sales/invoices/${id}/edit` : "/sales/invoices/new" },
   });
 };
-const handleNewItemChange = noop;
-const handleNewItemImageUpload = noop;
+const handleNewItemChange = (e: any) => {
+  const { name, value, type, checked } = e.target;
+  setNewItemData((prev: any) => ({
+    ...prev,
+    [name]: type === "radio" ? value : type === "checkbox" ? checked : value,
+  }));
+  setNewItemErrors((prev) => {
+    if (!prev[name]) return prev;
+    const next = { ...prev };
+    delete next[name];
+    return next;
+  });
+};
+const handleNewItemImageUpload = (e: any) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => setNewItemImage(String(reader.result || ""));
+  reader.readAsDataURL(file);
+};
 const handleNewSalespersonChange = (e: any) => {
   const { name, value } = e.target;
   setNewSalespersonData((prev: any) => ({ ...prev, [name]: value }));
@@ -1025,7 +1080,17 @@ const handleSaveAndSelectSalesperson = async () => {
   }
 };
 const handleSaveContactPerson = asyncNoop;
-const handleSaveNewItem = asyncNoop;
+const handleSaveNewItem = async () => {
+  const errors: Record<string, string> = {};
+  if (!String(newItemData.name || "").trim()) errors.name = "Name is required.";
+  if (!String(newItemData.sellingPrice || "").trim()) errors.sellingPrice = "Selling price is required.";
+  if (!String(newItemData.unit || "").trim()) errors.unit = "Unit is required.";
+
+  setNewItemErrors(errors);
+  if (Object.keys(errors).length > 0) return;
+
+  setIsNewItemModalOpen(false);
+};
 const handleSaveNewTax = asyncNoop;
 const handleTaxSelect = (itemId: number | string, taxId: string) => {
   setFormData((prev) => {
@@ -1315,6 +1380,15 @@ useEffect(() => {
     if (dueDatePickerRef.current && !dueDatePickerRef.current.contains(target)) {
       setIsDueDatePickerOpen(false);
     }
+    if (reportingTagDropdownRef.current && !reportingTagDropdownRef.current.contains(target)) {
+      setOpenReportingTagDropdownKey(null);
+    }
+    if (warehouseLocationDropdownRef.current && !warehouseLocationDropdownRef.current.contains(target)) {
+      setIsWarehouseLocationDropdownOpen(false);
+    }
+    if (taxExclusiveDropdownRef.current && !taxExclusiveDropdownRef.current.contains(target)) {
+      setIsTaxExclusiveDropdownOpen(false);
+    }
   };
 
   document.addEventListener("mousedown", handleClickOutside);
@@ -1597,6 +1671,7 @@ useEffect(() => {
 
         transformedItems = Array.isArray(rows)
           ? rows
+              .filter((item: any) => isItemActive(item))
               .map((item: any, index: number) => ({
                 ...item,
                 entityType: "item",
@@ -2005,6 +2080,39 @@ const handleUploadClick = () => {
 };
 
 const customerDetails = selectedCustomer || customers.find(c => c.name === formData.customerName);
+const getCustomerAddress = (customer: any, kind: "billing" | "shipping") => {
+  if (!customer) return null;
+  const source = kind === "billing" ? customer.billingAddress || {} : customer.shippingAddress || {};
+  return {
+    attention: source.attention || "",
+    street1: source.street1 || source.street || source.address || "",
+    street2: source.street2 || "",
+    city: source.city || "",
+    state: source.state || "",
+    zipCode: source.zipCode || source.postalCode || source.zip || "",
+    country: source.country || "",
+    phone: source.phone || "",
+    fax: source.fax || "",
+  };
+};
+
+const formatCustomerAddressLines = (address: any) => {
+  if (!address) return [];
+  const lines = [
+    address.attention,
+    address.street1,
+    address.street2,
+    [address.city, address.state].filter(Boolean).join(", "),
+    address.zipCode,
+    address.country,
+    address.phone ? `Phone: ${address.phone}` : "",
+    address.fax ? `Fax: ${address.fax}` : "",
+  ];
+  return lines.map((line) => String(line || "").trim()).filter(Boolean);
+};
+
+const selectedBillingAddress = formatCustomerAddressLines(getCustomerAddress(customerDetails, "billing"));
+const selectedShippingAddress = formatCustomerAddressLines(getCustomerAddress(customerDetails, "shipping"));
 
 const buildInvoicePayload = (statusValue: string) => {
   const totals = calculateInvoiceTotalsFromData(formData);
@@ -2043,6 +2151,9 @@ const buildInvoicePayload = (statusValue: string) => {
     customerId: customer?.id || customer?._id || undefined,
     customerName: customerDisplayName,
     customerEmail: customerEmail || undefined,
+    billingAddress: getCustomerAddress(customer, "billing") || undefined,
+    shippingAddress: getCustomerAddress(customer, "shipping") || undefined,
+    customerAddress: getCustomerAddress(customer, "billing") || getCustomerAddress(customer, "shipping") || undefined,
     priceListId: String(selectedPriceList?.id || selectedPriceList?._id || ""),
     priceListName: String(selectedPriceList?.name || ""),
     transactionNumberSeriesId: invoiceSeriesRef.current?.id || undefined,
@@ -2384,10 +2495,26 @@ return (
       {/* Header */}
       <div className="sticky top-0 z-40 flex-shrink-0 border-b border-gray-200 bg-white">
         <div className="w-full px-6 py-4 flex justify-between items-center">
-          <h1 className="text-lg font-normal text-gray-900 m-0 flex items-center gap-3">
-            <FileText size={20} className="text-gray-500" />
-            {isEditMode ? "Edit Invoice" : "New Invoice"}
-          </h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-lg font-normal text-gray-900 m-0 flex items-center gap-3">
+              <FileText size={20} className="text-gray-500" />
+              {isEditMode ? "Edit Invoice" : "New Invoice"}
+            </h1>
+            <div className="flex items-center gap-2 border-l border-gray-200 pl-4">
+              <span className="text-[13px] text-gray-700">Use Simplified View</span>
+              <button
+                type="button"
+                onClick={() => setIsSimplifiedView((prev) => !prev)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isSimplifiedView ? "bg-[#156372]" : "bg-gray-300"}`}
+                aria-pressed={isSimplifiedView}
+                aria-label="Toggle simplified invoice view"
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-200 ${isSimplifiedView ? "translate-x-5" : "translate-x-0.5"}`}
+                />
+              </button>
+            </div>
+          </div>
           <div className="flex items-center gap-3">
             <div className="relative" ref={settingsDropdownRef}>
               <button
@@ -2533,7 +2660,7 @@ return (
                   <div className="relative flex-1">
                     <input
                       type="text"
-                      className="w-full h-9 px-3 border border-gray-300 rounded-l focus:outline-none focus:border-[#3f83fb] text-sm bg-white"
+                      className="w-full h-10 rounded-l-md border border-[#c8d7dd] bg-white px-4 text-sm text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 hover:border-[#8bb8c0] hover:shadow-[0_10px_24px_rgba(21,99,114,0.08)] focus:outline-none focus:border-[#156372] focus:ring-4 focus:ring-[#156372]/10"
                       placeholder="Select or add a customer"
                       value={formData.customerName}
                       readOnly
@@ -2546,7 +2673,7 @@ return (
                   </div>
                   <button
                     type="button"
-                    className="h-9 w-10 bg-[#156372] text-white rounded-r hover:bg-[#0D4A52] flex items-center justify-center transition-colors border border-[#156372]"
+                    className="flex h-10 w-11 items-center justify-center rounded-r-md border border-[#156372] bg-[#156372] text-white shadow-[0_10px_24px_rgba(21,99,114,0.18)] transition-all duration-200 hover:-translate-y-[1px] hover:bg-[#0D4A52] hover:shadow-[0_14px_28px_rgba(13,74,82,0.24)]"
                     onClick={() => setCustomerSearchModalOpen(true)}
                   >
                     <Search size={16} />
@@ -2576,20 +2703,20 @@ return (
                           return (
                             <div
                               key={customer.id || customer._id || `cust-${idx}`}
-                              className={`px-3 py-2.5 cursor-pointer flex items-center gap-3 transition-colors border-b border-gray-50 last:border-0 ${isSelected ? "bg-blue-600 text-white" : "hover:bg-blue-50"}`}
+                              className={`px-3 py-2.5 cursor-pointer flex items-center gap-3 transition-colors border-b border-gray-50 last:border-0 ${isSelected ? "bg-white border-l-4 border-l-[#156372]" : "hover:bg-blue-50"}`}
                               onClick={() => handleCustomerSelect(customer)}
                             >
-                              <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${isSelected ? "bg-white text-blue-600" : "bg-blue-100 text-blue-700"}`}>
+                              <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${isSelected ? "bg-[#156372]/10 text-[#156372]" : "bg-blue-100 text-blue-700"}`}>
                                 {initial}
                               </div>
                               <div className="flex flex-col min-w-0">
-                                <div className={`text-sm font-medium truncate ${isSelected ? "text-white" : "text-gray-800"}`}>
+                                <div className={`text-sm font-medium truncate ${isSelected ? "text-gray-900" : "text-gray-800"}`}>
                                   {displayName}
-                                  {customerNo && <span className={`ml-2 text-xs font-normal ${isSelected ? "text-blue-100" : "text-gray-400"}`}>| {customerNo}</span>}
+                                  {customerNo && <span className={`ml-2 text-xs font-normal ${isSelected ? "text-gray-500" : "text-gray-400"}`}>| {customerNo}</span>}
                                 </div>
                                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                  {email && <span className={`text-xs ${isSelected ? "text-blue-100" : "text-gray-400"}`}>? {email}</span>}
-                                  {phone && <span className={`text-xs ${isSelected ? "text-blue-100" : "text-gray-400"}`}>?? {phone}</span>}
+                                  {email && <span className={`text-xs ${isSelected ? "text-gray-500" : "text-gray-400"}`}>? {email}</span>}
+                                  {phone && <span className={`text-xs ${isSelected ? "text-gray-500" : "text-gray-400"}`}>?? {phone}</span>}
                                 </div>
                               </div>
                             </div>
@@ -2616,7 +2743,7 @@ return (
                       const customerId = customerDetails._id || customerDetails.id;
                       navigate(`/sales/customers/${customerId}`);
                     }}
-                    className="h-9 whitespace-nowrap flex items-center gap-2 px-4 text-white rounded-md transition-colors text-sm font-medium"
+                    className="flex h-10 whitespace-nowrap items-center gap-2 rounded-md px-4 text-sm font-medium text-white shadow-[0_12px_28px_rgba(21,99,114,0.18)] transition-all duration-200 hover:-translate-y-[1px]"
                     style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
                     onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.9")}
                     onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
@@ -2628,41 +2755,52 @@ return (
               </div>
             </div>
 
-
-            <div className="flex items-center gap-6">
-              <label className="text-[13px] font-medium text-gray-600 w-[140px] flex-shrink-0">
-                Location
-              </label>
-              <div className="relative w-[280px]">
-                <select
-                  value={(formData as any).selectedLocation || "Head Office"}
-                  onChange={(e) => setFormData((prev: any) => ({ ...prev, selectedLocation: e.target.value }))}
-                  className="w-full h-9 px-3 pr-8 border border-gray-300 rounded focus:outline-none focus:border-blue-400 text-sm appearance-none bg-white"
-                >
-                  {locationOptions.map((option, index) => (
-                    <option key={`location-top-${index}-${option}`} value={option}>{option}</option>
-                  ))}
-                </select>
-                <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            {!isSimplifiedView && customerDetails && (
+              <div className="grid grid-cols-1 gap-6 rounded-md border border-slate-100 bg-white/70 px-6 py-4 md:grid-cols-2">
+                <div>
+                  <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    <span>Billing Address</span>
+                  </div>
+                  <div className="space-y-0.5 text-[13px] leading-5 text-slate-700">
+                    {selectedBillingAddress.length > 0 ? (
+                      selectedBillingAddress.map((line, idx) => <div key={`billing-${idx}`}>{line}</div>)
+                    ) : (
+                      <div className="text-slate-400">No billing address found</div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    <span>Shipping Address</span>
+                  </div>
+                  <div className="space-y-0.5 text-[13px] leading-5 text-slate-700">
+                    {selectedShippingAddress.length > 0 ? (
+                      selectedShippingAddress.map((line, idx) => <div key={`shipping-${idx}`}>{line}</div>)
+                    ) : (
+                      <div className="text-slate-400">No shipping address found</div>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
+
 
             {/* Invoice Number & Order Number */}
             <div className="flex items-center gap-6">
               <label className="text-[13px] font-medium text-red-500 w-[140px] flex-shrink-0">
                 Invoice#*
               </label>
-              <div className="relative w-[280px]">
+              <div className="relative w-[320px]">
                 <input
                   type="text"
-                  className="w-full h-9 px-3 border border-gray-300 rounded focus:outline-none bg-white text-sm pr-9"
+                  className="h-10 w-full rounded-md border border-[#c8d7dd] bg-white px-4 pr-10 text-sm text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 hover:border-[#8bb8c0] hover:shadow-[0_10px_24px_rgba(21,99,114,0.08)] focus:outline-none focus:border-[#156372] focus:ring-4 focus:ring-[#156372]/10"
                   value={formData.invoiceNumber}
                   readOnly
                 />
                 <button
                   type="button"
                   onClick={() => setIsInvoiceNumberModalOpen(true)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-400 hover:text-[#156372] transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7ca8b1] transition-colors hover:text-[#156372]"
                 >
                   <Settings size={14} />
                 </button>
@@ -2676,7 +2814,7 @@ return (
               <input
                 type="text"
                 name="orderNumber"
-                className="w-[280px] h-9 px-3 border border-gray-300 rounded focus:outline-none focus:border-blue-400 text-sm"
+                className="h-10 w-[320px] rounded-md border border-[#c8d7dd] bg-white px-4 text-sm text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 hover:border-[#8bb8c0] hover:shadow-[0_10px_24px_rgba(21,99,114,0.08)] focus:outline-none focus:border-[#156372] focus:ring-4 focus:ring-[#156372]/10"
                 value={formData.orderNumber}
                 onChange={handleChange}
               />
@@ -2688,10 +2826,10 @@ return (
                 <label className="text-[13px] font-medium text-red-500 w-[140px] flex-shrink-0">
                   Invoice Date*
                 </label>
-                <div className="relative flex-1" ref={invoiceDatePickerRef}>
+                <div className="relative w-[320px]" ref={invoiceDatePickerRef}>
                   <input
                     type="text"
-                    className="w-full h-9 px-3 border border-gray-300 rounded focus:outline-none focus:border-blue-400 text-sm cursor-pointer"
+                    className="h-10 w-full cursor-pointer rounded-md border border-[#c8d7dd] bg-white px-4 text-sm text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 hover:border-[#8bb8c0] hover:shadow-[0_10px_24px_rgba(21,99,114,0.08)] focus:outline-none focus:border-[#156372] focus:ring-4 focus:ring-[#156372]/10"
                     value={formData.invoiceDate}
                     readOnly
                     placeholder="26 Jan 2026"
@@ -2781,7 +2919,7 @@ return (
                 <div className="relative" ref={dueDatePickerRef}>
                   <input
                     type="text"
-                    className="w-[140px] h-9 px-3 border border-gray-300 rounded focus:outline-none focus:border-blue-400 text-sm border-dashed text-gray-600 cursor-pointer"
+                    className="h-10 w-[140px] cursor-pointer rounded-md border border-dashed border-[#c8d7dd] bg-white px-4 text-sm text-slate-600 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 hover:border-[#8bb8c0] hover:shadow-[0_10px_24px_rgba(21,99,114,0.08)] focus:outline-none focus:border-[#156372] focus:ring-4 focus:ring-[#156372]/10"
                     value={formData.dueDate}
                     readOnly
                     placeholder="26 Jan 2026"
@@ -2875,13 +3013,14 @@ return (
               </div>
             )}
 
-            <div className="flex items-center gap-6">
+            {!isSimplifiedView && (
+              <div className="flex items-center gap-6">
               <label className="text-[13px] font-medium text-gray-600 w-[140px] flex-shrink-0">
                 Salesperson
               </label>
-              <div className="flex-1 max-w-xs relative" ref={salespersonDropdownRef}>
+              <div className="relative w-[320px]" ref={salespersonDropdownRef}>
                 <div
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 flex justify-between items-center bg-white cursor-pointer"
+                  className="flex h-10 w-full cursor-pointer items-center justify-between rounded-md border border-[#c8d7dd] bg-white px-4 text-sm text-gray-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 hover:border-[#8bb8c0] hover:shadow-[0_10px_24px_rgba(21,99,114,0.08)]"
                   onClick={() => setIsSalespersonDropdownOpen(!isSalespersonDropdownOpen)}
                 >
                   <span className={formData.salesperson ? "text-gray-900" : "text-gray-400"}>
@@ -2931,7 +3070,8 @@ return (
                   </div>
                 )}
               </div>
-            </div>
+              </div>
+            )}
 
 
             {normalizedReportingTags.map((tag) => {
@@ -2946,61 +3086,96 @@ return (
                   <label className="text-[13px] font-medium text-gray-600 w-[140px] flex-shrink-0">
                     {tag.label}
                   </label>
-                  <div className="relative w-[280px]">
-                    <select
-                      value={currentValue}
-                      onChange={(e) =>
-                        setFormData((prev: any) => {
-                          const nextReportingTags = Array.isArray(prev.reportingTags)
-                            ? prev.reportingTags.filter(
-                                (entry: any) =>
-                                  String(entry?.tagId || "") !== String(tag.id || tag._id || tag.key)
-                                  && String(entry?.name || "") !== tag.label
-                              )
-                            : [];
-
-                          if (e.target.value) {
-                            nextReportingTags.push({
-                              tagId: tag.id || tag._id || tag.key,
-                              value: e.target.value,
-                              name: tag.label,
-                            });
-                          }
-
-                          return {
-                            ...prev,
-                            reportingTags: nextReportingTags,
-                          };
-                        })
-                      }
-                      className="w-full h-9 px-3 pr-8 border border-gray-300 rounded focus:outline-none focus:border-blue-400 text-sm appearance-none bg-white"
+                  <div className="relative w-[320px]" ref={openReportingTagDropdownKey === tag.key ? reportingTagDropdownRef : null}>
+                    <button
+                      type="button"
+                      onClick={() => setOpenReportingTagDropdownKey((prev) => (prev === tag.key ? null : tag.key))}
+                      className={`group flex h-10 w-full items-center justify-between rounded-md border bg-white px-4 text-left text-sm text-slate-700 transition-all duration-200 focus:outline-none ${
+                        openReportingTagDropdownKey === tag.key
+                          ? "border-[#156372] ring-4 ring-[#156372]/10 shadow-[0_10px_24px_rgba(21,99,114,0.10)]"
+                          : "border-[#c8d7dd] shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-[#8bb8c0] hover:shadow-[0_10px_24px_rgba(21,99,114,0.08)]"
+                      }`}
                     >
-                      <option value="">None</option>
-                      {tag.options.map((option: string, index: number) => (
-                        <option key={`${tag.key}-option-${index}-${option}`} value={option}>{option}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                      <span className={`truncate ${currentValue ? "text-slate-700" : "text-slate-500"}`}>{currentValue || "None"}</span>
+                      <ChevronDown
+                        size={14}
+                        className={`ml-3 flex-shrink-0 text-[#8aa8af] transition-transform duration-200 ${openReportingTagDropdownKey === tag.key ? "rotate-180 text-[#156372]" : "group-hover:text-[#156372]"}`}
+                      />
+                    </button>
+                    {openReportingTagDropdownKey === tag.key && (
+                      <div className="absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded-xl border border-[#d7e5e8] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.14)]">
+                        <div className="border-b border-[#eef4f6] bg-[linear-gradient(180deg,rgba(21,99,114,0.08),rgba(21,99,114,0.02))] px-4 py-2.5">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#6d8c94]">{tag.label}</p>
+                        </div>
+                        <div className="max-h-60 overflow-y-auto py-2">
+                          {["", ...tag.options].map((option: string, index: number) => {
+                            const optionLabel = option || "None";
+                            const isSelected = currentValue === option;
+                            return (
+                              <button
+                                key={`${tag.key}-option-${index}-${optionLabel}`}
+                                type="button"
+                                onClick={() => {
+                                  setFormData((prev: any) => {
+                                    const nextReportingTags = Array.isArray(prev.reportingTags)
+                                      ? prev.reportingTags.filter(
+                                          (entry: any) =>
+                                            String(entry?.tagId || "") !== String(tag.id || tag._id || tag.key)
+                                            && String(entry?.name || "") !== tag.label
+                                        )
+                                      : [];
+
+                                    if (option) {
+                                      nextReportingTags.push({
+                                        tagId: tag.id || tag._id || tag.key,
+                                        value: option,
+                                        name: tag.label,
+                                      });
+                                    }
+
+                                    return {
+                                      ...prev,
+                                      reportingTags: nextReportingTags,
+                                    };
+                                  });
+                                  setOpenReportingTagDropdownKey(null);
+                                }}
+                                className={`mx-2 flex w-[calc(100%-16px)] items-center justify-between rounded-md px-3 py-2.5 text-left text-sm transition-all duration-150 ${
+                                  isSelected
+                                    ? "border border-[#156372]/25 bg-white text-[#156372]"
+                                    : "text-slate-700 hover:bg-[#eef7f8] hover:text-[#156372]"
+                                }`}
+                              >
+                                <span className="truncate font-medium">{optionLabel}</span>
+                                {isSelected ? <Check size={15} className="ml-3 flex-shrink-0 text-[#156372]" /> : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
             })}
 
-            <div className="flex items-start gap-6">
-              <div className="flex items-center gap-2 w-[140px] pt-2">
-                <label className="text-[13px] font-medium text-gray-600">
-                  Subject
-                </label>
-                <Info size={12} className="text-gray-300 cursor-help" />
+            {!isSimplifiedView && (
+              <div className="flex items-start gap-6">
+                <div className="flex items-center gap-2 w-[140px] pt-2">
+                  <label className="text-[13px] font-medium text-gray-600">
+                    Subject
+                  </label>
+                  <Info size={12} className="text-gray-300 cursor-help" />
+                </div>
+                <textarea
+                  name="subject"
+                  className="h-[42px] min-h-[42px] w-[320px] max-w-full rounded-md border border-[#c8d7dd] bg-white px-4 py-2 text-sm text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 hover:border-[#8bb8c0] hover:shadow-[0_10px_24px_rgba(21,99,114,0.08)] focus:outline-none focus:border-[#156372] focus:ring-4 focus:ring-[#156372]/10 resize-y overflow-auto"
+                    placeholder="Let your customer know what this Invoice is for"
+                  value={formData.subject}
+                  onChange={handleChange}
+                />
               </div>
-              <textarea
-                name="subject"
-                className="w-full max-w-[900px] h-14 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-400 text-sm resize-none"
-                  placeholder="Let your customer know what this Invoice is for"
-                value={formData.subject}
-                onChange={handleChange}
-              />
-            </div>
+            )}
 
           </div>
 
@@ -3009,101 +3184,101 @@ return (
             <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-gray-200 pb-5">
               <div className="flex items-center gap-2 text-[12px] text-slate-500">
                 <span>Warehouse Location</span>
-                <div className="relative">
-                  <select
-                    value={(formData as any).selectedLocation || "Head Office"}
-                    onChange={(e) => setFormData((prev: any) => ({ ...prev, selectedLocation: e.target.value }))}
-                    className="h-9 min-w-[148px] appearance-none border-b border-dashed border-slate-300 bg-transparent pr-6 text-[13px] font-medium text-slate-700 outline-none"
+                <div className="relative" ref={warehouseLocationDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIsWarehouseLocationDropdownOpen((prev) => !prev)}
+                    className={`group flex h-9 min-w-[156px] items-center justify-between rounded-md border bg-white px-3 text-[13px] font-medium text-slate-700 transition-all duration-200 focus:outline-none ${
+                      isWarehouseLocationDropdownOpen
+                        ? "border-[#156372] ring-4 ring-[#156372]/10 shadow-[0_10px_24px_rgba(21,99,114,0.10)]"
+                        : "border-slate-200 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-[#8bb8c0] hover:shadow-[0_8px_20px_rgba(21,99,114,0.08)]"
+                    }`}
                   >
-                    {locationOptions.map((option, index) => (
-                      <option key={`location-table-${index}-${option}`} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown size={13} className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <span className="truncate">{(formData as any).selectedLocation || "Head Office"}</span>
+                    <ChevronDown
+                      size={13}
+                      className={`ml-3 flex-shrink-0 text-slate-400 transition-transform duration-200 ${isWarehouseLocationDropdownOpen ? "rotate-180 text-[#156372]" : "group-hover:text-[#156372]"}`}
+                    />
+                  </button>
+                  {isWarehouseLocationDropdownOpen && (
+                    <div className="absolute left-0 top-full z-[90] mt-2 w-[220px] overflow-hidden rounded-xl border border-[#d7e5e8] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.14)]">
+                      <div className="border-b border-[#eef4f6] bg-[linear-gradient(180deg,rgba(21,99,114,0.08),rgba(21,99,114,0.02))] px-4 py-2.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#6d8c94]">Locations</p>
+                      </div>
+                      <div className="max-h-56 overflow-y-auto py-2">
+                        {locationOptions.map((option, index) => {
+                          const isSelected = String((formData as any).selectedLocation || "Head Office") === String(option);
+                          return (
+                            <button
+                              key={`location-table-${index}-${option}`}
+                              type="button"
+                              onClick={() => {
+                                setFormData((prev: any) => ({ ...prev, selectedLocation: option }));
+                                setIsWarehouseLocationDropdownOpen(false);
+                              }}
+                              className={`mx-2 flex w-[calc(100%-16px)] items-center justify-between rounded-md px-3 py-2.5 text-left text-sm transition-all duration-150 ${
+                                isSelected
+                                  ? "border border-[#156372]/25 bg-white text-[#156372]"
+                                  : "text-slate-700 hover:bg-[#eef7f8] hover:text-[#156372]"
+                              }`}
+                            >
+                              <span className="truncate font-medium">{option}</span>
+                              {isSelected ? <Check size={15} className="ml-3 flex-shrink-0 text-[#156372]" /> : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="relative">
-                <select
-                  name="taxExclusive"
-                  value={formData.taxExclusive}
-                  onChange={handleChange}
-                  className="h-9 min-w-[152px] appearance-none rounded-md border border-transparent bg-white px-9 pr-8 text-[13px] text-slate-600 shadow-sm outline-none ring-1 ring-slate-200 transition focus:ring-2 focus:ring-blue-300"
-                >
-                  {taxExclusiveOptions.map((option, index) => (
-                    <option key={`tax-exclusive-${index}-${option}`} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-                <ClipboardList size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <ChevronDown size={13} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              </div>
-
-              <div className="relative" ref={priceListDropdownRef}>
+              <div className="relative" ref={taxExclusiveDropdownRef}>
                 <button
                   type="button"
-                  className="flex h-9 min-w-[160px] items-center justify-between rounded-md border border-transparent bg-white px-3 text-[13px] text-slate-500 shadow-sm ring-1 ring-slate-200 transition hover:text-slate-700"
-                  onClick={() => {
-                    loadCatalogPriceLists();
-                    setIsPriceListDropdownOpen((prev) => !prev);
-                    setPriceListSearch("");
-                  }}
+                  onClick={() => setIsTaxExclusiveDropdownOpen((prev) => !prev)}
+                  className={`group flex h-9 min-w-[152px] items-center justify-between rounded-md border bg-white px-3 text-[13px] text-slate-600 shadow-sm ring-1 transition focus:outline-none ${
+                    isTaxExclusiveDropdownOpen
+                      ? "border-[#156372] ring-[#156372]/15 shadow-[0_10px_24px_rgba(21,99,114,0.10)]"
+                      : "border-slate-200 ring-slate-200 hover:text-slate-700"
+                  }`}
                 >
                   <span className="flex items-center gap-2">
                     <ClipboardList size={13} className="text-slate-400" />
-                    {selectedPriceListDisplay}
+                    <span className="truncate">{formData.taxExclusive}</span>
                   </span>
-                  {isPriceListDropdownOpen ? (
-                    <ChevronUp size={13} className="text-[#2563eb]" />
-                  ) : (
-                    <ChevronDown size={13} className="text-slate-400" />
-                  )}
+                  <ChevronDown
+                    size={13}
+                    className={`text-slate-400 transition-transform duration-200 ${isTaxExclusiveDropdownOpen ? "rotate-180 text-[#156372]" : "group-hover:text-[#156372]"}`}
+                  />
                 </button>
-
-                {isPriceListDropdownOpen && (
-                  <div className="absolute left-0 top-full z-[90] mt-2 w-[240px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.14)]">
-                    <div className="border-b border-slate-100 p-2">
-                      <div className="relative">
-                        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input
-                          type="text"
-                          value={priceListSearch}
-                          onChange={(e) => setPriceListSearch(e.target.value)}
-                          placeholder="Search"
-                          className="h-9 w-full rounded-md border border-[#3b82f6] bg-white pl-9 pr-3 text-[13px] text-slate-700 outline-none"
-                        />
-                      </div>
+                {isTaxExclusiveDropdownOpen && (
+                  <div className="absolute left-0 top-full z-[90] mt-2 w-[190px] overflow-hidden rounded-xl border border-[#d7e5e8] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.14)]">
+                    <div className="border-b border-[#eef4f6] bg-[linear-gradient(180deg,rgba(21,99,114,0.08),rgba(21,99,114,0.02))] px-4 py-2.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#6d8c94]">Tax Mode</p>
                     </div>
-                    <div className="max-h-[260px] overflow-y-auto py-1">
-                      {filteredPriceListOptions.length > 0 ? (
-                        filteredPriceListOptions.map((option) => {
-                          const isSelected = ((formData as any).selectedPriceList || "") === option.name;
-                          return (
-                            <button
-                              key={option.id || option.name}
-                              type="button"
-                              className={`mx-2 flex w-[calc(100%-16px)] items-center justify-between rounded-md px-3 py-2 text-left text-[13px] ${
-                                isSelected
-                                  ? "bg-[#4a89e8] text-white"
-                                  : "text-slate-700 hover:bg-slate-50"
-                              }`}
-                              onClick={() => {
-                                setFormData((prev: any) => ({ ...prev, selectedPriceList: option.name }));
-                                setIsPriceListDropdownOpen(false);
-                                setPriceListSearch("");
-                              }}
-                            >
-                              <span className="truncate">{option.displayLabel}</span>
-                               {isSelected ? <Check size={14} className="text-[#156372]" /> : null}
-                            </button>
-                          );
-                        })
-                      ) : (
-                        <div className="px-3 py-2 text-[13px] text-slate-500">No price lists found</div>
-                      )}
+                    <div className="py-2">
+                      {taxExclusiveOptions.map((option, index) => {
+                        const isSelected = formData.taxExclusive === option;
+                        return (
+                          <button
+                            key={`tax-exclusive-${index}-${option}`}
+                            type="button"
+                            onClick={() => {
+                              setFormData((prev) => ({ ...prev, taxExclusive: option }));
+                              setIsTaxExclusiveDropdownOpen(false);
+                            }}
+                            className={`mx-2 flex w-[calc(100%-16px)] items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-all duration-150 ${
+                              isSelected
+                                ? "border border-[#156372]/25 bg-white text-[#156372]"
+                                : "text-slate-700 hover:bg-[#eef7f8] hover:text-[#156372]"
+                            }`}
+                          >
+                            <span className="font-medium">{option}</span>
+                            {isSelected ? <Check size={15} className="ml-3 flex-shrink-0 text-[#156372]" /> : null}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -3133,7 +3308,7 @@ return (
                       <div className="absolute right-0 top-full z-[140] mt-2 min-w-[210px] overflow-hidden rounded-md border border-slate-200 bg-white shadow-[0_12px_24px_rgba(15,23,42,0.16)]">
                         <button
                           type="button"
-                          className="mx-1 mt-1 flex w-[calc(100%-8px)] items-center justify-between rounded-md bg-[#156372] px-3 py-2 text-left text-[13px] font-medium text-white hover:bg-[#0D4A52]"
+                          className="mx-1 mt-1 flex w-[calc(100%-8px)] items-center justify-between rounded-md border border-[#156372] bg-white px-3 py-2 text-left text-[13px] font-medium text-[#156372] hover:border-[#0D4A52] hover:text-[#0D4A52]"
                           onClick={() => {
                             setBulkSelectedItemIds(standardLineItems.map((item) => item.id));
                             setIsBulkUpdateLineItemsActive(true);
@@ -6232,93 +6407,93 @@ return (
 
         {/* New Item Modal */}
         {isNewItemModalOpen && createPortal(
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000] overflow-y-auto py-8" onClick={handleCancelNewItem}>
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl my-8" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900">New Item</h2>
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center overflow-y-auto bg-slate-950/45 px-4 py-8 backdrop-blur-xl" onClick={handleCancelNewItem}>
+            <div className="w-full max-w-5xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_40px_90px_rgba(15,23,42,0.32)] ring-1 ring-black/5" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-white to-slate-50 px-6 py-4">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">New Item</h2>
+                  <p className="mt-1 text-sm text-slate-500">Create a sellable or purchasable item for your catalog.</p>
+                </div>
                 <button
-                  className="p-2  rounded-md text-gray-600 "
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
                   onClick={handleCancelNewItem}
                 >
-                  <X size={20} />
+                  <X size={18} />
                 </button>
               </div>
 
-              <div className="p-6 max-h-[calc(100vh-200px)] overflow-y-auto">
-                {/* Top Section - Type, Name, SKU, Unit, and Image */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                  <div className="md:col-span-2 space-y-4">
-                    {/* Type */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                        Type
-                        <Info size={14} className="text-gray-400" />
+              <div className="max-h-[calc(100vh-180px)] overflow-y-auto px-6 py-6">
+                {/* Top Section - Name, Type, Unit, and Image */}
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_0.9fr]">
+                  <div className="space-y-4">
+                    {/* Name */}
+                    <div className="grid items-center gap-3 md:grid-cols-[110px_minmax(0,1fr)]">
+                      <label className="flex items-center text-sm font-medium text-red-500">
+                        Name<span className="ml-1 text-red-500">*</span>
                       </label>
-                      <div className="flex gap-4">
-                        <label className="flex items-center gap-2 cursor-pointer">
+                      <div>
+                        <input
+                          type="text"
+                          name="name"
+                          className={`w-full rounded-md border bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm transition-all placeholder:text-slate-400 focus:outline-none focus:ring-4 ${
+                            newItemErrors.name
+                              ? "border-red-400 focus:border-red-500 focus:ring-red-100"
+                              : "border-slate-300 focus:border-[#156372] focus:ring-[#156372]/10"
+                          }`}
+                          value={newItemData.name}
+                          onChange={handleNewItemChange}
+                          placeholder="Item name"
+                        />
+                        {newItemErrors.name ? <p className="mt-1 text-xs text-red-500">{newItemErrors.name}</p> : null}
+                      </div>
+                    </div>
+
+                    {/* Type */}
+                    <div className="grid items-start gap-3 md:grid-cols-[110px_minmax(0,1fr)]">
+                      <label className="mt-1 flex items-center gap-1 text-sm font-medium text-slate-700">
+                        Type
+                        <Info size={14} className="text-slate-400" />
+                      </label>
+                      <div className="flex flex-wrap gap-4">
+                        <label className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 transition-colors hover:border-[#156372]/40 hover:bg-[#156372]/5">
                           <input
                             type="radio"
                             name="type"
                             value="Goods"
                             checked={newItemData.type === "Goods"}
                             onChange={handleNewItemChange}
-                            className="w-4 h-4 text-[#156372] border-gray-300 focus:ring-[#156372]"
+                            className="h-4 w-4 border-slate-300 text-[#156372] focus:ring-[#156372]"
                           />
-                          <span className="text-sm text-gray-700">Goods</span>
+                          <span className="text-sm font-medium text-slate-700">Goods</span>
                         </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
+                        <label className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 transition-colors hover:border-[#156372]/40 hover:bg-[#156372]/5">
                           <input
                             type="radio"
                             name="type"
                             value="Service"
                             checked={newItemData.type === "Service"}
                             onChange={handleNewItemChange}
-                            className="w-4 h-4 text-[#156372] border-gray-300 focus:ring-[#156372]"
+                            className="h-4 w-4 border-slate-300 text-[#156372] focus:ring-[#156372]"
                           />
-                          <span className="text-sm text-gray-700">Service</span>
+                          <span className="text-sm font-medium text-slate-700">Service</span>
                         </label>
                       </div>
                     </div>
 
-                    {/* Name */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Name<span className="text-red-500 ml-1">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        name="name"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#156372] focus:border-transparent"
-                        value={newItemData.name}
-                        onChange={handleNewItemChange}
-                      />
-                    </div>
-
-                    {/* SKU */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                        SKU
-                        <Info size={14} className="text-gray-400" />
-                      </label>
-                      <input
-                        type="text"
-                        name="sku"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#156372] focus:border-transparent"
-                        value={newItemData.sku}
-                        onChange={handleNewItemChange}
-                      />
-                    </div>
-
                     {/* Unit */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                    <div className="grid items-center gap-3 md:grid-cols-[110px_minmax(0,1fr)]">
+                      <label className="flex items-center gap-1 text-sm font-medium text-slate-700">
                         Unit
-                        <Info size={14} className="text-gray-400" />
+                        <Info size={14} className="text-slate-400" />
                       </label>
                       <div className="relative">
                         <select
                           name="unit"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#156372] focus:border-transparent appearance-none pr-10"
+                          className={`w-full appearance-none rounded-md border bg-white px-3 py-2.5 pr-10 text-sm text-slate-700 shadow-sm transition-all focus:outline-none focus:ring-4 ${
+                            newItemErrors.unit
+                              ? "border-red-400 focus:border-red-500 focus:ring-red-100"
+                              : "border-slate-300 focus:border-[#156372] focus:ring-[#156372]/10"
+                          }`}
                           value={newItemData.unit}
                           onChange={handleNewItemChange}
                         >
@@ -6329,7 +6504,8 @@ return (
                           <option value="ltr">ltr</option>
                           <option value="m">m</option>
                         </select>
-                        <ChevronDown size={16} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+                        <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        {newItemErrors.unit ? <p className="mt-1 text-xs text-red-500">{newItemErrors.unit}</p> : null}
                       </div>
                     </div>
                   </div>
@@ -6337,19 +6513,21 @@ return (
                   {/* Image Upload */}
                   <div>
                     <div
-                      className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-[#156372] transition-colors"
+                      className="flex min-h-[350px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-8 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] transition-all hover:border-[#156372] hover:bg-[#156372]/5"
                       onClick={() => newItemImageRef.current?.click()}
                     >
                       {newItemImage ? (
-                        <img src={newItemImage as string} alt="Item" className="w-full h-48 object-cover rounded" />
+                        <img src={newItemImage as string} alt="Item" className="h-48 w-full rounded-xl object-cover shadow-sm" />
                       ) : (
-                        <>
-                          <ImageIcon size={48} className="mx-auto text-gray-400 mb-2" />
-                          <p className="text-sm text-gray-600 mb-2">Drag image(s) here or</p>
-                          <button type="button" className="text-[#156372] hover:text-[#0D4A52] text-sm font-medium">
+                        <div className="space-y-3">
+                          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-200">
+                            <ImageIcon size={30} className="text-slate-400" />
+                          </div>
+                          <p className="text-sm text-slate-600">Drag image(s) here or</p>
+                          <button type="button" className="text-sm font-semibold text-[#156372] transition-colors hover:text-[#0D4A52]">
                             Browse images
                           </button>
-                        </>
+                        </div>
                       )}
                     </div>
                     <input
@@ -6362,238 +6540,72 @@ return (
                   </div>
                 </div>
 
-                {/* Sales and Purchase Information */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
-                  {/* Sales Information */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-base font-semibold text-gray-900">Sales Information</h3>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          name="sellable"
-                          checked={newItemData.sellable}
-                          onChange={handleNewItemChange}
-                          className="w-4 h-4 text-[#156372] border-gray-300 rounded focus:ring-[#156372]"
-                        />
-                        <span className="text-sm text-gray-700">Sellable</span>
-                      </label>
-                    </div>
+                {/* Sales Information */}
+                <div className="mt-6 rounded-lg border border-slate-200 bg-white px-5 py-5 shadow-sm">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-base font-semibold text-slate-900">Sales Information</h3>
+                  </div>
 
                     {/* Selling Price */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_1fr]">
+                      <div>
+                      <label className="mb-2 block text-sm font-medium text-red-500">
                         Selling Price<span className="text-red-500 ml-1">*</span>
                       </label>
-                      <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
-                        <span className="px-3 py-2 bg-gray-50 text-sm text-gray-700 border-r border-gray-300">{formData.currency}</span>
+                      <div className={`flex items-center overflow-hidden rounded-md border bg-white shadow-sm focus-within:ring-4 ${
+                        newItemErrors.sellingPrice
+                          ? "border-red-400 focus-within:border-red-500 focus-within:ring-red-100"
+                          : "border-slate-300 focus-within:border-[#156372] focus-within:ring-[#156372]/10"
+                      }`}>
+                        <span className="border-r border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-600">{formData.currency}</span>
                         <input
                           type="number"
                           name="sellingPrice"
-                          className="flex-1 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#156372]"
+                          className="flex-1 px-3 py-2.5 text-sm text-slate-700 outline-none"
                           value={newItemData.sellingPrice}
                           onChange={handleNewItemChange}
                           step="0.01"
                           placeholder="0.00"
                         />
                       </div>
+                      {newItemErrors.sellingPrice ? <p className="mt-1 text-xs text-red-500">{newItemErrors.sellingPrice}</p> : null}
                     </div>
 
-                    {/* Sales Account */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Account<span className="text-red-500 ml-1">*</span>
-                      </label>
-                      <div className="relative">
-                        <select
-                          name="salesAccount"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#156372] focus:border-transparent appearance-none pr-10 bg-white"
-                          value={newItemData.salesAccount}
-                          onChange={handleNewItemChange}
-                        >
-                          <option value="Sales">Sales</option>
-                          <option value="Service Income">Service Income</option>
-                          <option value="Other Income">Other Income</option>
-                        </select>
-                        <ChevronDown size={16} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-slate-700">Tax</label>
+                        <div className="relative">
+                          <select
+                            name="salesTax"
+                          className="w-full appearance-none rounded-md border border-slate-300 bg-white px-3 py-2.5 pr-10 text-sm text-slate-700 shadow-sm transition-all focus:border-[#156372] focus:outline-none focus:ring-4 focus:ring-[#156372]/10"
+                            value={newItemData.salesTax}
+                            onChange={handleNewItemChange}
+                          >
+                            <option value="">Select a Tax</option>
+                            {taxOptions.map(tax => (
+                              <option key={tax.id} value={tax.id}>{tax.name}</option>
+                            ))}
+                          </select>
+                          <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Sales Description */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                      <textarea
-                        name="salesDescription"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#156372] focus:border-transparent resize-none"
-                        value={newItemData.salesDescription}
-                        onChange={handleNewItemChange}
-                        rows={3}
-                        placeholder="Enter description"
-                      />
-                    </div>
-
-                    {/* Sales Tax */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                        Tax
-                        <Info size={14} className="text-gray-400" />
-                      </label>
-                      <div className="relative">
-                        <select
-                          name="salesTax"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#156372] focus:border-transparent appearance-none pr-10 bg-white"
-                          value={newItemData.salesTax}
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-slate-700">Description</label>
+                        <textarea
+                          name="salesDescription"
+                          className="h-[116px] w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm transition-all placeholder:text-slate-400 focus:border-[#156372] focus:outline-none focus:ring-4 focus:ring-[#156372]/10"
+                          value={newItemData.salesDescription}
                           onChange={handleNewItemChange}
-                        >
-                          <option value="">Select a Tax</option>
-                          {taxOptions.map(tax => (
-                            <option key={tax.id} value={tax.id}>{tax.name}</option>
-                          ))}
-                        </select>
-                        <ChevronDown size={16} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Purchase Information */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-base font-semibold text-gray-900">Purchase Information</h3>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          name="purchasable"
-                          checked={newItemData.purchasable}
-                          onChange={handleNewItemChange}
-                          className="w-4 h-4 text-[#156372] border-gray-300 rounded focus:ring-[#156372]"
-                        />
-                        <span className="text-sm text-gray-700">Purchasable</span>
-                      </label>
-                    </div>
-
-                    {/* Cost Price */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Cost Price<span className="text-red-500 ml-1">*</span>
-                      </label>
-                      <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
-                        <span className="px-3 py-2 bg-gray-50 text-sm text-gray-700 border-r border-gray-300">{formData.currency}</span>
-                        <input
-                          type="number"
-                          name="costPrice"
-                          className="flex-1 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#156372]"
-                          value={newItemData.costPrice}
-                          onChange={handleNewItemChange}
-                          step="0.01"
-                          placeholder="0.00"
+                          placeholder="Enter description"
                         />
                       </div>
                     </div>
-
-                    {/* Purchase Account */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Account<span className="text-red-500 ml-1">*</span>
-                      </label>
-                      <div className="relative">
-                        <select
-                          name="purchaseAccount"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#156372] focus:border-transparent appearance-none pr-10 bg-white"
-                          value={newItemData.purchaseAccount}
-                          onChange={handleNewItemChange}
-                        >
-                          <option value="Cost of Goods Sold">Cost of Goods Sold</option>
-                          <option value="Purchases">Purchases</option>
-                          <option value="Expenses">Expenses</option>
-                        </select>
-                        <ChevronDown size={16} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
-                      </div>
-                    </div>
-
-                    {/* Purchase Description */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                      <textarea
-                        name="purchaseDescription"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#156372] focus:border-transparent resize-none"
-                        value={newItemData.purchaseDescription}
-                        onChange={handleNewItemChange}
-                        rows={3}
-                        placeholder="Enter description"
-                      />
-                    </div>
-
-                    {/* Purchase Tax */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                        Tax
-                        <Info size={14} className="text-gray-400" />
-                      </label>
-                      <div className="relative">
-                        <select
-                          name="purchaseTax"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#156372] focus:border-transparent appearance-none pr-10 bg-white"
-                          value={newItemData.purchaseTax}
-                          onChange={handleNewItemChange}
-                        >
-                          <option value="">Select a Tax</option>
-                          {taxOptions.map(tax => (
-                            <option key={tax.id} value={tax.id}>{tax.name}</option>
-                          ))}
-                        </select>
-                        <ChevronDown size={16} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
-                      </div>
-                    </div>
-
-                    {/* Preferred Vendor */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Vendor</label>
-                      <div className="relative">
-                        <select
-                          name="preferredVendor"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#156372] focus:border-transparent appearance-none pr-10 bg-white"
-                          value={newItemData.preferredVendor}
-                          onChange={handleNewItemChange}
-                        >
-                          <option value=""></option>
-                        </select>
-                        <ChevronDown size={16} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Track Inventory Section */}
-                <div className="mt-6 pt-6 border-t border-gray-200">
-                  <label className="flex items-center gap-2 cursor-pointer mb-3">
-                    <input
-                      type="checkbox"
-                      name="trackInventory"
-                      checked={newItemData.trackInventory}
-                      onChange={handleNewItemChange}
-                      className="w-4 h-4 text-[#156372] border-gray-300 rounded focus:ring-[#156372]"
-                    />
-                    <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
-                      Track Inventory for this item
-                      <Info size={14} className="text-gray-400" />
-                    </span>
-                  </label>
-                  <p className="text-xs text-gray-500 mb-4 ml-6">
-                    You cannot enable/disable inventory tracking once you've created transactions for this item
-                  </p>
-
-                  {newItemData.trackInventory && (
-                    <div className="ml-6 p-3 bg-orange-50 border border-orange-200 rounded-md flex items-start gap-2">
-                      <Info size={16} className="text-orange-600 mt-0.5 flex-shrink-0" />
-                      <span className="text-sm text-orange-800">Note: You can configure the opening stock and stock tracking for this item under the Items module</span>
-                    </div>
-                  )}
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
+              <div className="flex items-center justify-end gap-3 border-t border-slate-200 bg-gradient-to-r from-slate-50 to-white px-6 py-5">
                 <button
-                  className="px-6 py-2 text-sm font-medium text-white rounded-md transition-colors"
+                  className="px-6 py-2.5 text-sm font-semibold text-white rounded-md transition-all shadow-sm hover:shadow-md"
                   style={{
                     background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)"
                   }}
@@ -6604,7 +6616,7 @@ return (
                   Save
                 </button>
                 <button
-                  className="px-6 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md  transition-colors"
+                  className="px-6 py-2.5 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-md transition-colors hover:border-slate-400 hover:bg-slate-50"
                   onClick={handleCancelNewItem}
                 >
                   Cancel

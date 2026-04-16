@@ -1366,14 +1366,6 @@ export default function RecurringInvoices() {
                     )}
                   </div>
 
-                  {/* New Custom View */}
-                  <button
-                    className="flex items-center justify-center gap-2 p-4 border-t border-gray-100 bg-white text-[#156372] text-sm font-bold cursor-pointer hover:bg-gray-50 transition-all active:scale-[0.98] w-full"
-                    onClick={handleNewCustomView}
-                  >
-                    <Plus size={18} strokeWidth={3} />
-                    New Custom View
-                  </button>
                 </div>
               )}
             </div>

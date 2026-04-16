@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -104,6 +105,8 @@ const decimalFormatOptions = [
 ];
 
 const FULL_INVOICE_LIST_LIMIT = 10000;
+const OVERLAY_GAP = 8;
+const OVERLAY_VIEWPORT_PADDING = 12;
 
 // Skeleton Loader Component - logic inline in table body
 export default function Invoices() {
@@ -517,12 +520,45 @@ export default function Invoices() {
   const shareModalRef = useRef(null);
   const visibilityDropdownRef = useRef(null);
   const invoiceDropdownRef = useRef(null);
+  const invoiceDropdownMenuRef = useRef<HTMLDivElement | null>(null);
   const decimalFormatDropdownRef = useRef(null);
   const bulkUpdateFieldDropdownRef = useRef(null);
   const statusDropdownRef = useRef(null);
   const moreMenuRef = useRef(null);
+  const moreMenuContentRef = useRef<HTMLDivElement | null>(null);
   const newDropdownRef = useRef(null);
   const actionDropdownRef = useRef(null);
+  const [invoiceDropdownPosition, setInvoiceDropdownPosition] = useState({ top: 0, left: 0 });
+  const [moreMenuPosition, setMoreMenuPosition] = useState({ top: 0, left: 0 });
+
+  const clampOverlayLeft = (desiredLeft: number, width: number) => {
+    if (typeof window === "undefined") return desiredLeft;
+    const maxLeft = Math.max(
+      OVERLAY_VIEWPORT_PADDING,
+      window.innerWidth - width - OVERLAY_VIEWPORT_PADDING
+    );
+    return Math.min(Math.max(desiredLeft, OVERLAY_VIEWPORT_PADDING), maxLeft);
+  };
+
+  const updateInvoiceDropdownPosition = () => {
+    if (typeof window === "undefined" || !invoiceDropdownRef.current) return;
+    const dropdownWidth = 288;
+    const triggerRect = (invoiceDropdownRef.current as HTMLDivElement).getBoundingClientRect();
+    setInvoiceDropdownPosition({
+      top: triggerRect.bottom + OVERLAY_GAP,
+      left: clampOverlayLeft(triggerRect.left, dropdownWidth)
+    });
+  };
+
+  const updateMoreMenuPosition = () => {
+    if (typeof window === "undefined" || !moreMenuRef.current) return;
+    const menuWidth = 256;
+    const triggerRect = (moreMenuRef.current as HTMLDivElement).getBoundingClientRect();
+    setMoreMenuPosition({
+      top: triggerRect.bottom + OVERLAY_GAP,
+      left: clampOverlayLeft(triggerRect.right - menuWidth, menuWidth)
+    });
+  };
 
   useEffect(() => {
     const statusFromUrl = searchParams.get("status");
@@ -550,14 +586,26 @@ export default function Invoices() {
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (invoiceDropdownRef.current && !invoiceDropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+
+      const clickedInvoiceDropdown =
+        (invoiceDropdownRef.current && invoiceDropdownRef.current.contains(target)) ||
+        (invoiceDropdownMenuRef.current && invoiceDropdownMenuRef.current.contains(target));
+
+      if (!clickedInvoiceDropdown) {
         setIsInvoiceDropdownOpen(false);
       }
       if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
         setIsStatusDropdownOpen(false);
       }
-      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
+      const clickedMoreMenu =
+        (moreMenuRef.current && moreMenuRef.current.contains(target)) ||
+        (moreMenuContentRef.current && moreMenuContentRef.current.contains(target));
+
+      if (!clickedMoreMenu) {
         setIsMoreMenuOpen(false);
+        setSortSubMenuOpen(false);
+        setExportSubMenuOpen(false);
       }
       if (newDropdownRef.current && !newDropdownRef.current.contains(event.target as Node)) {
         setIsNewDropdownOpen(false);
@@ -587,6 +635,35 @@ export default function Invoices() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isInvoiceDropdownOpen, isStatusDropdownOpen, isMoreMenuOpen, isNewDropdownOpen, isBulkUpdateFieldDropdownOpen, isBulkUpdateValueDropdownOpen, isDecimalFormatDropdownOpen, activeActionInvoiceId, isVisibilityDropdownOpen]);
+
+  useEffect(() => {
+    if (!isMoreMenuOpen) {
+      setSortSubMenuOpen(false);
+      setExportSubMenuOpen(false);
+    }
+  }, [isMoreMenuOpen]);
+
+  useEffect(() => {
+    if (!isInvoiceDropdownOpen && !isMoreMenuOpen) return;
+
+    const updateOverlayPositions = () => {
+      if (isInvoiceDropdownOpen) {
+        updateInvoiceDropdownPosition();
+      }
+      if (isMoreMenuOpen) {
+        updateMoreMenuPosition();
+      }
+    };
+
+    updateOverlayPositions();
+    window.addEventListener("resize", updateOverlayPositions);
+    window.addEventListener("scroll", updateOverlayPositions, true);
+
+    return () => {
+      window.removeEventListener("resize", updateOverlayPositions);
+      window.removeEventListener("scroll", updateOverlayPositions, true);
+    };
+  }, [isInvoiceDropdownOpen, isMoreMenuOpen]);
 
   const handleViewSelect = async (view: string) => {
     setIsInvoiceDropdownOpen(false);
@@ -1179,7 +1256,7 @@ export default function Invoices() {
               {fieldOptions.map((option) => (
                 <div
                   key={option}
-                  className="px-4 py-2.5 text-sm text-gray-700 cursor-pointer hover:bg-blue-600 hover:text-white transition-colors"
+                  className="px-4 py-2.5 text-sm text-gray-700 cursor-pointer hover:text-[#156372] transition-colors"
                   onClick={() => {
                     setBulkUpdateValue(option);
                     setIsBulkUpdateValueDropdownOpen(false);
@@ -1601,7 +1678,7 @@ export default function Invoices() {
     pdf.save(fileName);
   };
 
-  const handleDownloadPDF = async (singleInvoice = null) => {
+  const handleDownloadPDF = async (singleInvoice: Invoice | null = null) => {
     if (!singleInvoice && selectedInvoices.size === 0) return;
     if (isGeneratingPdf) return;
 
@@ -1848,7 +1925,7 @@ export default function Invoices() {
     }
   };
 
-  const handleConfirmMarkAsPaid = async () => {
+  const handleConfirmMarkAsSent = async () => {
     try {
       let updatedCount = 0;
       let skippedCount = 0;
@@ -1863,7 +1940,6 @@ export default function Invoices() {
         return normalized;
       };
 
-      // Process sequentially so status transitions happen in a predictable order.
       for (const invoiceId of selectedInvoiceIds) {
         const invoice = invoices.find((inv) => inv.id === invoiceId);
         if (!invoice) {
@@ -1873,40 +1949,39 @@ export default function Invoices() {
 
         const currentStatus = normalizeStatus(invoice.status);
 
-        if (currentStatus === "paid" || currentStatus === "void") {
+        if (currentStatus === "sent" || currentStatus === "viewed" || currentStatus === "paid" || currentStatus === "void") {
           skippedCount++;
           continue;
         }
 
         try {
-          // Backend requires draft -> sent -> paid (draft -> paid is invalid).
-          if (currentStatus === "draft") {
-            await updateInvoice(invoiceId, { status: "sent" } as any);
-          }
-
-          await updateInvoice(invoiceId, { status: "paid" } as any);
+          await updateInvoice(invoiceId, {
+            status: "sent",
+            sentAt: new Date().toISOString(),
+          } as any);
           updatedCount++;
         } catch (error) {
-          console.error(`[MarkAsPaid] Failed to update invoice ${invoiceId}:`, error);
+          console.error(`[MarkAsSent] Failed to update invoice ${invoiceId}:`, error);
           failedCount++;
         }
       }
 
-      // Refresh the invoices list
       await invoiceQuery.refetch();
 
       setIsMarkAsSentModalOpen(false);
       setSelectedInvoices(new Set());
 
       if (failedCount === 0 && skippedCount === 0 && updatedCount > 0) {
-        toast(`Marked ${updatedCount} invoice(s) as paid successfully`);
+        toast(updatedCount === 1
+          ? "Invoice status has been changed to Sent."
+          : `${updatedCount} invoice statuses have been changed to Sent.`);
       } else if (updatedCount > 0) {
-        toast(`Marked ${updatedCount} invoice(s) as paid. Skipped: ${skippedCount}. Failed: ${failedCount}.`);
+        toast(`${updatedCount} invoice(s) marked as sent. Skipped: ${skippedCount}. Failed: ${failedCount}.`);
       } else {
-        toast("No invoices were updated. Selected invoices may already be marked as paid.");
+        toast("No invoices were updated. Selected invoices may already be marked as sent.");
       }
     } catch (error) {
-      toast("Failed to mark invoices as paid. Please try again.");
+      toast("Failed to mark invoices as sent. Please try again.");
     }
   };
 
@@ -2124,7 +2199,7 @@ export default function Invoices() {
     }
   };
 
-  const handleMarkAsPaidAction = () => {
+  const handleMarkAsSentAction = () => {
     if (selectedInvoices.size === 0) {
       toast("Please select at least one invoice.");
       return;
@@ -2162,7 +2237,7 @@ export default function Invoices() {
 
               <button
                 type="button"
-                onClick={handleDownloadPDF}
+                onClick={() => handleDownloadPDF()}
                 className={`h-9 w-9 rounded-md border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 transition-colors shadow-sm flex items-center justify-center ${isGeneratingPdf ? "opacity-60 cursor-not-allowed" : ""}`}
                 title="Export PDF"
                 aria-label="Export PDF"
@@ -2173,10 +2248,10 @@ export default function Invoices() {
 
               <button
                 type="button"
-                onClick={handleMarkAsPaidAction}
+                onClick={handleMarkAsSentAction}
                 className="h-9 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 transition-colors shadow-sm flex items-center gap-2"
               >
-                Mark As Paid
+                Mark As Sent
               </button>
 
               <button
@@ -2216,7 +2291,10 @@ export default function Invoices() {
               <div className="relative" ref={invoiceDropdownRef}>
                 <button
                   type="button"
-                  onClick={() => setIsInvoiceDropdownOpen((prev) => !prev)}
+                  onClick={() => {
+                    updateInvoiceDropdownPosition();
+                    setIsInvoiceDropdownOpen((prev) => !prev);
+                  }}
                   className="flex items-center gap-1.5 py-4 cursor-pointer group border-b-2 border-slate-900 -mb-[1px] bg-transparent outline-none"
                 >
                   <span className="text-[15px] font-bold text-slate-900 transition-colors">{selectedView}</span>
@@ -2225,37 +2303,6 @@ export default function Invoices() {
                     className={`transition-transform duration-200 text-[#156372] ${isInvoiceDropdownOpen ? "rotate-180" : ""}`}
                   />
                 </button>
-
-                {isInvoiceDropdownOpen && (
-                  <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-2xl z-[100] py-2">
-                    <div className="px-3 pb-2 border-b border-gray-100">
-                      <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-md border border-gray-200">
-                        <Search size={14} className="text-gray-400" />
-                        <input
-                          placeholder="Search Views"
-                          className="bg-transparent border-none outline-none text-sm w-full"
-                          value={viewSearchQuery}
-                          onChange={(e) => setViewSearchQuery(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div className="max-h-80 overflow-y-auto py-1">
-                      {filteredDefaultViews.map((view) => (
-                        <button
-                          key={view}
-                          type="button"
-                          onClick={() => handleViewSelect(view)}
-                          className="w-full flex items-center justify-between px-4 py-2 text-sm hover:bg-teal-50 transition-colors"
-                        >
-                          <span className={isViewSelected(view) ? "font-semibold text-teal-700" : "text-slate-700"}>
-                            {view}
-                          </span>
-                          {isViewSelected(view) && <CheckCircle size={14} className="text-[#156372]" />}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -2273,154 +2320,205 @@ export default function Invoices() {
               <div className="relative" ref={moreMenuRef}>
                 <button
                   type="button"
-                  onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
+                  onClick={() => {
+                    updateMoreMenuPosition();
+                    setIsMoreMenuOpen((prev) => !prev);
+                  }}
                   className="p-1.5 border border-gray-200 rounded hover:bg-gray-50 transition-colors bg-white shadow-sm"
                   title="More Actions"
                 >
                   <MoreHorizontal size={18} className="text-gray-500" />
                 </button>
-                {isMoreMenuOpen && (
-                  <div className="absolute top-full right-0 mt-1 w-64 bg-white border border-gray-100 rounded-lg shadow-xl py-2 z-[110]">
-                    <div className="relative">
-                      <button
-                        onClick={() => {
-                          setSortSubMenuOpen((prev) => !prev);
-                          setExportSubMenuOpen(false);
-                        }}
-                        className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${sortSubMenuOpen ? "text-white rounded-md mx-2 w-[calc(100%-16px)] shadow-sm" : "text-slate-600 hover:bg-[#1b5e6a] hover:text-white"
-                          }`}
-                        style={sortSubMenuOpen ? { backgroundColor: "#1b5e6a" } : {}}
-                        type="button"
-                      >
-                        <div className="flex items-center gap-3">
-                          <ArrowUpDown size={15} className={sortSubMenuOpen ? "text-white" : ""} />
-                          <span className="font-medium">Sort by</span>
-                        </div>
-                        <ChevronRight size={14} className={sortSubMenuOpen ? "text-white" : "text-slate-400"} />
-                      </button>
-                      {sortSubMenuOpen && (
-                        <div className="absolute top-0 right-full mr-2 w-64 bg-white border border-gray-100 rounded-lg shadow-xl py-2 z-[120]">
-                          {sortByOptions.map((option) => (
-                            <button
-                              key={option}
-                              onClick={() => {
-                                handleSort(option);
-                                setSortSubMenuOpen(false);
-                                setIsMoreMenuOpen(false);
-                              }}
-                              className={`w-full text-left px-4 py-2 text-sm transition-colors ${activeSortField === option
-                                ? "bg-[#1b5e6a] text-white font-semibold"
-                                : "text-slate-600 hover:bg-teal-50"
-                                }`}
-                              type="button"
-                            >
-                              {option}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        navigate("/sales/invoices/import");
-                        setIsMoreMenuOpen(false);
-                      }}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"
-                      type="button"
-                    >
-                      <Download size={15} />
-                      <span className="font-medium">Import Invoices</span>
-                    </button>
-
-                    <div className="relative">
-                      <button
-                        onClick={() => {
-                          setExportSubMenuOpen((prev) => !prev);
-                          setSortSubMenuOpen(false);
-                        }}
-                        className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${exportSubMenuOpen ? "text-white rounded-md mx-2 w-[calc(100%-16px)] shadow-sm" : "text-slate-600 hover:bg-[#1b5e6a] hover:text-white"
-                          }`}
-                        style={exportSubMenuOpen ? { backgroundColor: "#1b5e6a" } : {}}
-                        type="button"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Upload size={15} className={exportSubMenuOpen ? "text-white" : ""} />
-                          <span className="font-medium">Export</span>
-                        </div>
-                        <ChevronRight size={14} className={exportSubMenuOpen ? "text-white" : "text-slate-400"} />
-                      </button>
-                      {exportSubMenuOpen && (
-                        <div className="absolute top-0 right-full mr-2 w-56 bg-white border border-gray-100 rounded-lg shadow-xl py-2 z-[120]">
-                          <button
-                            className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"
-                            onClick={() => {
-                              handleExportAllInvoices();
-                              setExportSubMenuOpen(false);
-                              setIsMoreMenuOpen(false);
-                            }}
-                            type="button"
-                          >
-                            Export Invoices
-                          </button>
-                          <button
-                            className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"
-                            onClick={() => {
-                              handleExportCurrentView();
-                              setExportSubMenuOpen(false);
-                              setIsMoreMenuOpen(false);
-                            }}
-                            type="button"
-                          >
-                            Export Current View
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="h-px bg-gray-100 my-1 mx-2" />
-
-                    <button
-                      onClick={() => {
-                        navigate("/settings/invoices");
-                        setIsMoreMenuOpen(false);
-                      }}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"
-                      type="button"
-                    >
-                      <Settings size={15} />
-                      <span className="font-medium">Preferences</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        refreshData();
-                        setIsMoreMenuOpen(false);
-                      }}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"
-                      type="button"
-                    >
-                      <RefreshCw size={15} />
-                      <span className="font-medium">Refresh List</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        handleResetColumnWidth();
-                        setIsMoreMenuOpen(false);
-                      }}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"
-                      type="button"
-                    >
-                      <RotateCcw size={15} />
-                      <span className="font-medium">Reset Column Width</span>
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           </div>
         )}
+
+      {isInvoiceDropdownOpen && typeof document !== "undefined" && createPortal(
+        <div
+          ref={invoiceDropdownMenuRef}
+          className="fixed w-72 bg-white border border-gray-200 rounded-lg shadow-2xl z-[260] py-2"
+          style={{
+            top: invoiceDropdownPosition.top,
+            left: invoiceDropdownPosition.left
+          }}
+        >
+          <div className="px-3 pb-2 border-b border-gray-100">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-md border border-gray-200">
+              <Search size={14} className="text-gray-400" />
+              <input
+                placeholder="Search Views"
+                className="bg-transparent border-none outline-none text-sm w-full"
+                value={viewSearchQuery}
+                onChange={(e) => setViewSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="max-h-80 overflow-y-auto py-1">
+            {filteredDefaultViews.map((view) => (
+              <button
+                key={view}
+                type="button"
+                onClick={() => handleViewSelect(view)}
+                className="w-full flex items-center justify-between px-4 py-2 text-sm hover:bg-teal-50 transition-colors"
+              >
+                <span className={isViewSelected(view) ? "font-semibold text-teal-700" : "text-slate-700"}>
+                  {view}
+                </span>
+                {isViewSelected(view) && <CheckCircle size={14} className="text-[#156372]" />}
+              </button>
+            ))}
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {isMoreMenuOpen && typeof document !== "undefined" && createPortal(
+        <div
+          ref={moreMenuContentRef}
+          className="fixed w-64 bg-white border border-gray-100 rounded-lg shadow-xl py-2 z-[270]"
+          style={{
+            top: moreMenuPosition.top,
+            left: moreMenuPosition.left
+          }}
+        >
+          <div className="relative">
+            <button
+              onClick={() => {
+                setSortSubMenuOpen((prev) => !prev);
+                setExportSubMenuOpen(false);
+              }}
+              className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${sortSubMenuOpen ? "text-white rounded-md mx-2 w-[calc(100%-16px)] shadow-sm" : "text-slate-600 hover:bg-[#1b5e6a] hover:text-white"
+                }`}
+              style={sortSubMenuOpen ? { backgroundColor: "#1b5e6a" } : {}}
+              type="button"
+            >
+              <div className="flex items-center gap-3">
+                <ArrowUpDown size={15} className={sortSubMenuOpen ? "text-white" : ""} />
+                <span className="font-medium">Sort by</span>
+              </div>
+              <ChevronRight size={14} className={sortSubMenuOpen ? "text-white" : "text-slate-400"} />
+            </button>
+            {sortSubMenuOpen && (
+              <div className="absolute top-0 right-full mr-2 w-64 bg-white border border-gray-100 rounded-lg shadow-xl py-2 z-[280]">
+                {sortByOptions.map((option) => (
+                  <button
+                    key={option}
+                    onClick={() => {
+                      handleSort(option);
+                      setSortSubMenuOpen(false);
+                      setIsMoreMenuOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-2 text-sm transition-colors ${activeSortField === option
+                      ? "bg-[#1b5e6a] text-white font-semibold"
+                      : "text-slate-600 hover:bg-teal-50"
+                      }`}
+                    type="button"
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={() => {
+              navigate("/sales/invoices/import");
+              setIsMoreMenuOpen(false);
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"
+            type="button"
+          >
+            <Download size={15} />
+            <span className="font-medium">Import Invoices</span>
+          </button>
+
+          <div className="relative">
+            <button
+              onClick={() => {
+                setExportSubMenuOpen((prev) => !prev);
+                setSortSubMenuOpen(false);
+              }}
+              className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${exportSubMenuOpen ? "text-white rounded-md mx-2 w-[calc(100%-16px)] shadow-sm" : "text-slate-600 hover:bg-[#1b5e6a] hover:text-white"
+                }`}
+              style={exportSubMenuOpen ? { backgroundColor: "#1b5e6a" } : {}}
+              type="button"
+            >
+              <div className="flex items-center gap-3">
+                <Upload size={15} className={exportSubMenuOpen ? "text-white" : ""} />
+                <span className="font-medium">Export</span>
+              </div>
+              <ChevronRight size={14} className={exportSubMenuOpen ? "text-white" : "text-slate-400"} />
+            </button>
+            {exportSubMenuOpen && (
+              <div className="absolute top-0 right-full mr-2 w-56 bg-white border border-gray-100 rounded-lg shadow-xl py-2 z-[280]">
+                <button
+                  className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"
+                  onClick={() => {
+                    handleExportAllInvoices();
+                    setExportSubMenuOpen(false);
+                    setIsMoreMenuOpen(false);
+                  }}
+                  type="button"
+                >
+                  Export Invoices
+                </button>
+                <button
+                  className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"
+                  onClick={() => {
+                    handleExportCurrentView();
+                    setExportSubMenuOpen(false);
+                    setIsMoreMenuOpen(false);
+                  }}
+                  type="button"
+                >
+                  Export Current View
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="h-px bg-gray-100 my-1 mx-2" />
+
+          <button
+            onClick={() => {
+              navigate("/settings/invoices");
+              setIsMoreMenuOpen(false);
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"
+            type="button"
+          >
+            <Settings size={15} />
+            <span className="font-medium">Preferences</span>
+          </button>
+
+          <button
+            onClick={() => {
+              refreshData();
+              setIsMoreMenuOpen(false);
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"
+            type="button"
+          >
+            <RefreshCw size={15} />
+            <span className="font-medium">Refresh List</span>
+          </button>
+
+          <button
+            onClick={() => {
+              handleResetColumnWidth();
+              setIsMoreMenuOpen(false);
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"
+            type="button"
+          >
+            <RotateCcw size={15} />
+            <span className="font-medium">Reset Column Width</span>
+          </button>
+        </div>,
+        document.body
+      )}
 
       {/* Content Area */}
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
@@ -2806,7 +2904,7 @@ export default function Invoices() {
                       {bulkUpdateFieldOptions.map((field) => (
                         <div
                           key={field}
-                          className="px-4 py-2.5 text-sm text-gray-700 cursor-pointer hover:bg-[#156372] hover:text-white transition-colors"
+                          className="px-4 py-2.5 text-sm text-gray-700 cursor-pointer hover:text-[#156372] transition-colors"
                           onClick={() => {
                             setBulkUpdateField(field);
                             setBulkUpdateValue("");
@@ -2925,18 +3023,18 @@ export default function Invoices() {
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center gap-3">
                 <AlertTriangle size={24} className="text-yellow-600 flex-shrink-0" />
-                <h2>Are you sure about marking the selected invoices as paid?</h2>
+                <h2>Mark invoices as sent?</h2>
               </div>
             </div>
             <div className="p-6">
-              <p>The Invoice(s) that are marked as paid will be displayed as paid in the system and customer portal.</p>
+              <p>The Invoice(s) that are marked as sent will be displayed in the respective contacts' Customer Portal (if enabled).</p>
             </div>
             <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
               <button
                 className="px-4 py-2 bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white rounded-md text-sm font-medium cursor-pointer hover:opacity-90 shadow-sm"
-                onClick={handleConfirmMarkAsPaid}
+                onClick={handleConfirmMarkAsSent}
               >
-                Yes, Mark as Paid
+                Yes, Mark as Sent
               </button>
               <button
                 className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:bg-gray-50"

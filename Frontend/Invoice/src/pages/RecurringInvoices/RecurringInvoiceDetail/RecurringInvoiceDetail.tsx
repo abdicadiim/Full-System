@@ -284,16 +284,6 @@ export default function RecurringInvoiceDetail() {
                   ))}
                 </div>
 
-                {/* New Custom View */}
-                <div
-                  onClick={() => {
-                    setIsAllRecurringInvoicesDropdownOpen(false);
-                  }}
-                  className="flex items-center gap-2 px-4 py-3 border-t border-gray-200 bg-gray-50 text-sm font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
-                >
-                  <Plus size={16} />
-                  New Custom View
-                </div>
               </div>
             )}
           </div>

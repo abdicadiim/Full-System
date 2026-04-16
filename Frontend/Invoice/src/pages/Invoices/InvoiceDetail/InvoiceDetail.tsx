@@ -1,9 +1,10 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "react-toastify";
 import { senderEmailsAPI } from "../../../services/api";
 import { resolveVerifiedPrimarySender } from "../../../utils/emailSenderDisplay";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { getInvoiceById, getInvoices, updateInvoice, getPayments, getTaxes, getCreditNotesByInvoiceId, deletePayment, Tax, Invoice, AttachedFile, saveInvoice } from "../../salesModel";
+import { getInvoiceById, getInvoices, updateInvoice, getPayments, getTaxes, getCreditNotesByInvoiceId, deletePayment, deleteInvoice, Tax, Invoice, AttachedFile, saveInvoice } from "../../salesModel";
 import { currenciesAPI, invoicesAPI, creditNotesAPI, paymentsReceivedAPI, bankAccountsAPI, refundsAPI } from "../../../services/api";
 import FieldCustomization from "../../shared/FieldCustomization";
 import InvoiceCommentsPanel from "./InvoiceCommentsPanel";
@@ -12,6 +13,7 @@ const InvoicePaymentModals = lazy(() => import("./modals/InvoicePaymentModals"))
 const InvoiceSupportModals = lazy(() => import("./modals/InvoiceSupportModals"));
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import JSZip from "jszip";
 import {
   X, Edit, Send, Share2, FileText, Clock, MoreVertical, MoreHorizontal,
   ChevronDown, ChevronUp, ChevronRight, Sparkles, Plus, Filter,
@@ -31,6 +33,7 @@ export default function InvoiceDetail() { // Start of component
   const isDebitNoteView = location.pathname.includes("/sales/debit-notes/");
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [selectedSidebarInvoices, setSelectedSidebarInvoices] = useState<Set<string>>(new Set());
   const [baseCurrency, setBaseCurrency] = useState("USD");
   const [payments, setPayments] = useState<any[]>([]);
   const [selectedItems, setSelectedItems] = useState<Set<any>>(new Set());
@@ -43,6 +46,19 @@ export default function InvoiceDetail() { // Start of component
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [isAllInvoicesDropdownOpen, setIsAllInvoicesDropdownOpen] = useState(false);
   const [showSidebarMoreDropdown, setShowSidebarMoreDropdown] = useState(false);
+  const [showSidebarCreateDropdown, setShowSidebarCreateDropdown] = useState(false);
+  const [showSidebarSortSubMenu, setShowSidebarSortSubMenu] = useState(false);
+  const [showSidebarExportSubMenu, setShowSidebarExportSubMenu] = useState(false);
+  const [sidebarActiveSortField, setSidebarActiveSortField] = useState("Created Time");
+  const [isSidebarBulkActionsOpen, setIsSidebarBulkActionsOpen] = useState(false);
+  const [isSidebarBulkUpdateModalOpen, setIsSidebarBulkUpdateModalOpen] = useState(false);
+  const [sidebarBulkUpdateField, setSidebarBulkUpdateField] = useState("");
+  const [sidebarBulkUpdateValue, setSidebarBulkUpdateValue] = useState("");
+  const [sidebarBulkUpdateReason, setSidebarBulkUpdateReason] = useState("");
+  const [isSidebarBulkUpdating, setIsSidebarBulkUpdating] = useState(false);
+  const [allInvoicesDropdownPosition, setAllInvoicesDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
+  const [sidebarCreateDropdownPosition, setSidebarCreateDropdownPosition] = useState({ top: 0, left: 0 });
+  const [sidebarMoreDropdownPosition, setSidebarMoreDropdownPosition] = useState({ top: 0, left: 0 });
   const [filterSearch, setFilterSearch] = useState("");
   const [isSendEmailModalOpen, setIsSendEmailModalOpen] = useState(false);
   const [isScheduleEmailModalOpen, setIsScheduleEmailModalOpen] = useState(false);
@@ -144,8 +160,13 @@ export default function InvoiceDetail() { // Start of component
   const remindersDropdownRef = useRef(null);
   const allInvoicesDropdownRef = useRef(null);
   const sidebarMoreRef = useRef(null);
+  const sidebarCreateRef = useRef(null);
+  const sidebarBulkActionsRef = useRef(null);
   const sendDropdownRef = useRef(null);
   const pdfDropdownRef = useRef(null);
+  const allInvoicesDropdownMenuRef = useRef<HTMLDivElement | null>(null);
+  const sidebarCreateMenuRef = useRef<HTMLDivElement | null>(null);
+  const sidebarMoreMenuRef = useRef<HTMLDivElement | null>(null);
   const attachmentsFileInputRef = useRef<HTMLInputElement>(null);
   const organizationAddressFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -720,7 +741,12 @@ export default function InvoiceDetail() { // Start of component
       if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
         setIsMoreMenuOpen(false);
       }
-      if (allInvoicesDropdownRef.current && !allInvoicesDropdownRef.current.contains(event.target as Node)) {
+      if (
+        allInvoicesDropdownRef.current &&
+        !allInvoicesDropdownRef.current.contains(event.target as Node) &&
+        allInvoicesDropdownMenuRef.current &&
+        !allInvoicesDropdownMenuRef.current.contains(event.target as Node)
+      ) {
         setIsAllInvoicesDropdownOpen(false);
       }
       if (sendDropdownRef.current && !sendDropdownRef.current.contains(event.target as Node)) {
@@ -735,19 +761,54 @@ export default function InvoiceDetail() { // Start of component
       if (customizeDropdownRef.current && !customizeDropdownRef.current.contains(event.target as Node)) {
         setIsCustomizeDropdownOpen(false);
       }
-      if (sidebarMoreRef.current && !sidebarMoreRef.current.contains(event.target as Node)) {
+      if (
+        sidebarMoreRef.current &&
+        !sidebarMoreRef.current.contains(event.target as Node) &&
+        sidebarMoreMenuRef.current &&
+        !sidebarMoreMenuRef.current.contains(event.target as Node)
+      ) {
         setShowSidebarMoreDropdown(false);
+        setShowSidebarSortSubMenu(false);
+        setShowSidebarExportSubMenu(false);
+      }
+      if (
+        sidebarCreateRef.current &&
+        !sidebarCreateRef.current.contains(event.target as Node) &&
+        sidebarCreateMenuRef.current &&
+        !sidebarCreateMenuRef.current.contains(event.target as Node)
+      ) {
+        setShowSidebarCreateDropdown(false);
+      }
+      if (sidebarBulkActionsRef.current && !sidebarBulkActionsRef.current.contains(event.target as Node)) {
+        setIsSidebarBulkActionsOpen(false);
       }
     };
 
-    if (isMoreMenuOpen || isAllInvoicesDropdownOpen || isSendDropdownOpen || isRemindersDropdownOpen || isPdfDropdownOpen || isCustomizeDropdownOpen) {
+    if (isMoreMenuOpen || isAllInvoicesDropdownOpen || isSendDropdownOpen || isRemindersDropdownOpen || isPdfDropdownOpen || isCustomizeDropdownOpen || isSidebarBulkActionsOpen || showSidebarMoreDropdown || showSidebarCreateDropdown) {
       document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isMoreMenuOpen, isAllInvoicesDropdownOpen, isSendDropdownOpen, isRemindersDropdownOpen, isPdfDropdownOpen, isCustomizeDropdownOpen]);
+  }, [isMoreMenuOpen, isAllInvoicesDropdownOpen, isSendDropdownOpen, isRemindersDropdownOpen, isPdfDropdownOpen, isCustomizeDropdownOpen, isSidebarBulkActionsOpen, showSidebarMoreDropdown, showSidebarCreateDropdown]);
+
+  useEffect(() => {
+    if (!isAllInvoicesDropdownOpen && !showSidebarCreateDropdown && !showSidebarMoreDropdown) return;
+
+    const handleViewportChange = () => {
+      if (isAllInvoicesDropdownOpen) updateAllInvoicesDropdownPosition();
+      if (showSidebarCreateDropdown) updateSidebarCreateDropdownPosition();
+      if (showSidebarMoreDropdown) updateSidebarMoreDropdownPosition();
+    };
+
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+    return () => {
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [isAllInvoicesDropdownOpen, showSidebarCreateDropdown, showSidebarMoreDropdown]);
 
   const handleSendReminderNow = async () => {
     try {
@@ -876,6 +937,59 @@ export default function InvoiceDetail() { // Start of component
     if (typeof value === "string" || typeof value === "number") return String(value);
     if (typeof value === "object") return String(value._id || value.id || "");
     return "";
+  };
+
+  const getInvoiceRowId = (row: any) => String(row?.id || row?._id || "").trim();
+
+  const getSelectedSidebarInvoiceRows = () =>
+    invoices.filter((row) => selectedSidebarInvoices.has(getInvoiceRowId(row)));
+
+  const sidebarSortOptions = [
+    "Created Time",
+    "Last Modified Time",
+    "Date",
+    "Invoice#",
+    "Order Number",
+    "Customer Name",
+    "Due Date",
+    "Amount",
+    "Balance Due",
+  ];
+
+  const sanitizeExportName = (value: string, fallback: string) => {
+    const cleaned = String(value || "")
+      .trim()
+      .replace(/[<>:"/\\|?*\x00-\x1f]+/g, "-")
+      .replace(/\s+/g, " ");
+    return cleaned || fallback;
+  };
+
+  const updateAllInvoicesDropdownPosition = () => {
+    if (!allInvoicesDropdownRef.current) return;
+    const rect = allInvoicesDropdownRef.current.getBoundingClientRect();
+    setAllInvoicesDropdownPosition({
+      top: rect.bottom + 8,
+      left: rect.left,
+      width: rect.width,
+    });
+  };
+
+  const updateSidebarCreateDropdownPosition = () => {
+    if (!sidebarCreateRef.current) return;
+    const rect = sidebarCreateRef.current.getBoundingClientRect();
+    setSidebarCreateDropdownPosition({
+      top: rect.bottom + 8,
+      left: rect.right - 180,
+    });
+  };
+
+  const updateSidebarMoreDropdownPosition = () => {
+    if (!sidebarMoreRef.current) return;
+    const rect = sidebarMoreRef.current.getBoundingClientRect();
+    setSidebarMoreDropdownPosition({
+      top: rect.bottom + 8,
+      left: rect.right - 224,
+    });
   };
 
   const getInvoiceNumberPrefix = (invoiceNumber: any) => {
@@ -1300,11 +1414,158 @@ export default function InvoiceDetail() { // Start of component
     setShowShareModal(true);
   };
 
-  // Generate HTML content for invoice (shared for print and download)
-  const generateInvoiceHTML = () => {
-    if (!invoice) return '';
+  const getInvoiceHtmlStyles = () => `
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      @page {
+        size: A4;
+        margin: 0;
+      }
+      body {
+        font-family: Arial, sans-serif;
+        padding: 40px;
+        color: #333;
+      }
+      .invoice-container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 30px;
+        padding-bottom: 20px;
+        border-bottom: 2px solid #eee;
+      }
+      .company-info h1 {
+        font-size: 24px;
+        margin-bottom: 10px;
+        color: #111;
+      }
+      .invoice-info {
+        text-align: right;
+      }
+      .invoice-info h2 {
+        font-size: 32px;
+        font-weight: bold;
+        margin-bottom: 10px;
+        color: #111;
+      }
+      .invoice-number {
+        font-size: 18px;
+        color: #666;
+        margin-bottom: 10px;
+      }
+      .balance-due {
+        font-size: 20px;
+        font-weight: bold;
+        color: #111;
+      }
+      .details {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+        margin-bottom: 30px;
+      }
+      .bill-to h3 {
+        font-size: 12px;
+        text-transform: uppercase;
+        color: #666;
+        margin-bottom: 10px;
+      }
+      .bill-to p {
+        font-size: 14px;
+        color: #333;
+        margin-bottom: 5px;
+      }
+      .invoice-details {
+        text-align: right;
+      }
+      .invoice-details p {
+        font-size: 14px;
+        margin-bottom: 5px;
+        display: flex;
+        justify-content: space-between;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+      }
+      thead {
+        background-color: #374151;
+        color: white;
+      }
+      th {
+        padding: 12px;
+        text-align: left;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+      }
+      tbody tr {
+        border-bottom: 1px solid #eee;
+      }
+      td {
+        padding: 12px;
+        font-size: 14px;
+      }
+      .col-number { width: 5%; }
+      .col-item { width: 45%; }
+      .col-qty { width: 15%; }
+      .col-rate { width: 15%; }
+      .col-amount { width: 20%; text-align: right; }
+      .summary {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 20px;
+      }
+      .summary-table {
+        width: 300px;
+      }
+      .summary-table tr {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+      }
+      .summary-table .total {
+        font-weight: bold;
+        font-size: 16px;
+        border-top: 2px solid #eee;
+        padding-top: 10px;
+        margin-top: 10px;
+      }
+      .notes {
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #eee;
+      }
+      .notes h3 {
+        font-size: 14px;
+        font-weight: bold;
+        margin-bottom: 10px;
+      }
+      .notes p {
+        font-size: 14px;
+        color: #666;
+        line-height: 1.6;
+      }
+      .print-break {
+        page-break-after: always;
+      }
+      .print-break:last-child {
+        page-break-after: auto;
+      }
+      @media print {
+        body { padding: 20px; }
+      }
+    `;
 
-    const itemsHTML = invoice.items && invoice.items.length > 0 ? invoice.items.map((item, index) => {
+  // Generate HTML content for invoice (shared for print and download)
+  const generateInvoiceBodyHTML = (sourceInvoice: any) => {
+    if (!sourceInvoice) return "";
+
+    const itemsHTML = sourceInvoice.items && sourceInvoice.items.length > 0 ? sourceInvoice.items.map((item, index) => {
       const rate = parseFloat(item.rate || item.price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const amount = parseFloat(item.amount || (item.quantity || 0) * (item.rate || item.price || 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const qty = parseFloat(item.quantity || 0).toFixed(2);
@@ -1321,164 +1582,17 @@ export default function InvoiceDetail() { // Start of component
       `;
     }).join('') : '<tr><td colspan="5" style="text-align: center; color: #666;">No items</td></tr>';
 
-    const invoiceDate = invoice.invoiceDate || invoice.date || new Date().toISOString();
+    const invoiceDate = sourceInvoice.invoiceDate || sourceInvoice.date || new Date().toISOString();
     const formattedDate = formatDateShort(invoiceDate);
-    const dueDate = invoice.dueDate ? formatDateShort(invoice.dueDate) : formattedDate;
-    const customerName = invoice.customerName || (typeof invoice.customer === 'object' ? (invoice.customer?.displayName || invoice.customer?.companyName || invoice.customer?.name) : invoice.customer) || 'N/A';
-    const totalsMeta = getInvoiceTotalsMeta(invoice);
+    const dueDate = sourceInvoice.dueDate ? formatDateShort(sourceInvoice.dueDate) : formattedDate;
+    const customerName = sourceInvoice.customerName || (typeof sourceInvoice.customer === 'object' ? (sourceInvoice.customer?.displayName || sourceInvoice.customer?.companyName || sourceInvoice.customer?.name) : sourceInvoice.customer) || 'N/A';
+    const totalsMeta = getInvoiceTotalsMeta(sourceInvoice);
     const subTotal = formatCurrencyNumber(totalsMeta.subTotal);
-    const total = formatCurrency(totalsMeta.total, invoice.currency || 'KES');
-    const balanceDue = formatCurrency(totalsMeta.balance, invoice.currency || 'KES');
-    const notes = invoice.customerNotes || '';
+    const total = formatCurrency(totalsMeta.total, sourceInvoice.currency || 'KES');
+    const balanceDue = formatCurrency(totalsMeta.balance, sourceInvoice.currency || 'KES');
+    const notes = sourceInvoice.customerNotes || '';
 
     return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Invoice ${invoice.invoiceNumber || invoice.id}</title>
-        <meta charset="UTF-8">
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          @page {
-            size: A4;
-            margin: 0;
-          }
-          body {
-            font-family: Arial, sans-serif;
-            padding: 40px;
-            color: #333;
-          }
-          .invoice-container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-          }
-          .header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #eee;
-          }
-          .company-info h1 {
-            font-size: 24px;
-            margin-bottom: 10px;
-            color: #111;
-          }
-          .invoice-info {
-            text-align: right;
-          }
-          .invoice-info h2 {
-            font-size: 32px;
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: #111;
-          }
-          .invoice-number {
-            font-size: 18px;
-            color: #666;
-            margin-bottom: 10px;
-          }
-          .balance-due {
-            font-size: 20px;
-            font-weight: bold;
-            color: #111;
-          }
-          .details {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-bottom: 30px;
-          }
-          .bill-to h3 {
-            font-size: 12px;
-            text-transform: uppercase;
-            color: #666;
-            margin-bottom: 10px;
-          }
-          .bill-to p {
-            font-size: 14px;
-            color: #333;
-            margin-bottom: 5px;
-          }
-          .invoice-details {
-            text-align: right;
-          }
-          .invoice-details p {
-            font-size: 14px;
-            margin-bottom: 5px;
-            display: flex;
-            justify-content: space-between;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-          }
-          thead {
-            background-color: #374151;
-            color: white;
-          }
-          th {
-            padding: 12px;
-            text-align: left;
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-          }
-          tbody tr {
-            border-bottom: 1px solid #eee;
-          }
-          td {
-            padding: 12px;
-            font-size: 14px;
-          }
-          .col-number { width: 5%; }
-          .col-item { width: 45%; }
-          .col-qty { width: 15%; }
-          .col-rate { width: 15%; }
-          .col-amount { width: 20%; text-align: right; }
-          .summary {
-            display: flex;
-            justify-content: flex-end;
-            margin-top: 20px;
-          }
-          .summary-table {
-            width: 300px;
-          }
-          .summary-table tr {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-          }
-          .summary-table .total {
-            font-weight: bold;
-            font-size: 16px;
-            border-top: 2px solid #eee;
-            padding-top: 10px;
-            margin-top: 10px;
-          }
-          .notes {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
-          }
-          .notes h3 {
-            font-size: 14px;
-            font-weight: bold;
-            margin-bottom: 10px;
-          }
-          .notes p {
-            font-size: 14px;
-            color: #666;
-            line-height: 1.6;
-          }
-          @media print {
-            body { padding: 20px; }
-          }
-        </style>
-      </head>
-      <body>
         <div class="invoice-container">
           <div class="header">
             <div class="company-info">
@@ -1494,7 +1608,7 @@ export default function InvoiceDetail() { // Start of component
             </div>
             <div class="invoice-info">
               <h2>INVOICE</h2>
-              <div class="invoice-number"># ${invoice.invoiceNumber || invoice.id}</div>
+              <div class="invoice-number"># ${sourceInvoice.invoiceNumber || sourceInvoice.id}</div>
               <div class="balance-due">Balance Due: ${balanceDue}</div>
             </div>
           </div>
@@ -1508,7 +1622,7 @@ export default function InvoiceDetail() { // Start of component
               <p><span>Invoice Date :</span> <strong>${formattedDate}</strong></p>
               <p><span>Terms :</span> <strong>Due on Receipt</strong></p>
               <p><span>Due Date :</span> <strong>${dueDate}</strong></p>
-              ${invoice.orderNumber ? `<p><span>P.O.# :</span> <strong>${invoice.orderNumber}</strong></p>` : ''}
+              ${sourceInvoice.orderNumber ? `<p><span>P.O.# :</span> <strong>${sourceInvoice.orderNumber}</strong></p>` : ''}
             </div>
           </div>
           
@@ -1576,18 +1690,18 @@ export default function InvoiceDetail() { // Start of component
               ${totalsMeta.paidAmount > 0 ? `
               <tr>
                 <td>Payment Made</td>
-                <td>(-) ${formatCurrency(totalsMeta.paidAmount, invoice.currency || 'KES')}</td>
+                <td>(-) ${formatCurrency(totalsMeta.paidAmount, sourceInvoice.currency || 'KES')}</td>
               </tr>
               ` : ''}
               ${totalsMeta.creditsApplied > 0 ? `
               <tr>
                 <td>Credits Applied</td>
-                <td>(-) ${formatCurrency(totalsMeta.creditsApplied, invoice.currency || 'KES')}</td>
+                <td>(-) ${formatCurrency(totalsMeta.creditsApplied, sourceInvoice.currency || 'KES')}</td>
               </tr>
               ` : ''}
               <tr class="total">
                 <td>Balance Due</td>
-                <td>${formatCurrency(totalsMeta.balance, invoice.currency || 'KES')}</td>
+                <td>${formatCurrency(totalsMeta.balance, sourceInvoice.currency || 'KES')}</td>
               </tr>
             </table>
           </div>
@@ -1599,16 +1713,28 @@ export default function InvoiceDetail() { // Start of component
           </div>
           ` : ''}
         </div>
+    `;
+  };
+
+  const generateInvoiceHTML = (sourceInvoice: any = invoice) => {
+    if (!sourceInvoice) return "";
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Invoice ${sourceInvoice.invoiceNumber || sourceInvoice.id}</title>
+        <meta charset="UTF-8">
+        <style>${getInvoiceHtmlStyles()}</style>
+      </head>
+      <body>
+        ${generateInvoiceBodyHTML(sourceInvoice)}
       </body>
       </html>
     `;
   };
 
-  const handleDownloadPDF = async () => {
-    setIsPdfDropdownOpen(false);
-    if (!invoice) return;
-    setIsDownloadingPdf(true);
-
+  const generateInvoicePdfBlob = async (sourceInvoice: any): Promise<Blob> => {
     const wrapper = document.createElement("div");
     wrapper.style.position = "fixed";
     wrapper.style.left = "-10000px";
@@ -1616,7 +1742,7 @@ export default function InvoiceDetail() { // Start of component
     wrapper.style.width = "794px";
     wrapper.style.background = "#ffffff";
     wrapper.style.zIndex = "-1";
-    wrapper.innerHTML = generateInvoiceHTML();
+    wrapper.innerHTML = generateInvoiceHTML(sourceInvoice);
     document.body.appendChild(wrapper);
 
     try {
@@ -1650,15 +1776,42 @@ export default function InvoiceDetail() { // Start of component
         heightLeft -= printableHeight;
       }
 
-      pdf.save(`Invoice-${invoice.invoiceNumber || invoice.id}.pdf`);
+      return pdf.output("blob");
+    } finally {
+      if (wrapper.parentNode) {
+        wrapper.parentNode.removeChild(wrapper);
+      }
+    }
+  };
+
+  const downloadBlobFile = (blob: Blob, filename: string) => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadPDF = async (sourceInvoice: any = invoice) => {
+    setIsPdfDropdownOpen(false);
+    if (!sourceInvoice) return;
+    setIsDownloadingPdf(true);
+
+    try {
+      const blob = await generateInvoicePdfBlob(sourceInvoice);
+      const fileName = sanitizeExportName(
+        `Invoice-${sourceInvoice.invoiceNumber || sourceInvoice.id}.pdf`,
+        "Invoice.pdf"
+      );
+      downloadBlobFile(blob, fileName);
     } catch (error) {
       console.error("Error downloading invoice PDF:", error);
       toast("Failed to generate PDF. Please try again.");
     } finally {
       setIsDownloadingPdf(false);
-      if (wrapper.parentNode) {
-        wrapper.parentNode.removeChild(wrapper);
-      }
     }
   };
 
@@ -2345,8 +2498,114 @@ export default function InvoiceDetail() { // Start of component
     setIsPdfDropdownOpen(false);
     if (!invoice) return;
     const printWindow = window.open('', '_blank');
-    printWindow.document.write(generateInvoiceHTML());
+    printWindow.document.write(generateInvoiceHTML(invoice));
     printWindow.document.close();
+  };
+
+  const openPrintWindow = (title: string, bodyMarkup: string) => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast("Unable to open print preview. Please allow pop-ups and try again.");
+      return;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${title}</title>
+        <meta charset="UTF-8">
+        <style>${getInvoiceHtmlStyles()}</style>
+      </head>
+      <body>${bodyMarkup}</body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  };
+
+  const generateDocumentNoteHTML = (documentTitle: string, sourceInvoice: any = invoice) => {
+    if (!sourceInvoice) return "";
+
+    const customerName = sourceInvoice.customerName || (typeof sourceInvoice.customer === "string" ? sourceInvoice.customer : sourceInvoice.customer?.displayName || sourceInvoice.customer?.name) || "N/A";
+    const invoiceDate = sourceInvoice.invoiceDate || sourceInvoice.date || new Date().toISOString();
+    const dueDate = sourceInvoice.dueDate || invoiceDate;
+    const rows = Array.isArray(sourceInvoice.items) ? sourceInvoice.items : [];
+    const itemsHTML = rows.length
+      ? rows.map((item: any, index: number) => `
+          <tr>
+            <td class="col-number">${index + 1}</td>
+            <td class="col-item">${item.itemDetails || item.name || item.description || "N/A"}</td>
+            <td class="col-qty">${Number(item.quantity || 0).toFixed(2)}</td>
+            <td class="col-rate">${formatCurrencyNumber(item.rate || item.price || 0)}</td>
+          </tr>
+        `).join("")
+      : `<tr><td colspan="4" style="text-align:center;color:#666;">No items</td></tr>`;
+
+    return `
+      <div class="invoice-container">
+        <div class="header">
+          <div class="company-info">
+            <h1>${organizationProfile?.name || "TABAN ENTERPRISES"}</h1>
+            <p>${organizationProfile?.address?.street1 || ""}</p>
+            <p>${organizationProfile?.address?.city || ""}</p>
+            <p>${organizationProfile?.address?.country || ""}</p>
+          </div>
+          <div class="invoice-info">
+            <h2>${documentTitle}</h2>
+            <div class="invoice-number"># ${sourceInvoice.invoiceNumber || sourceInvoice.id}</div>
+          </div>
+        </div>
+
+        <div class="details">
+          <div class="bill-to">
+            <h3>Customer</h3>
+            <p><strong>${customerName}</strong></p>
+            <p>${sourceInvoice.customerEmail || sourceInvoice.email || ""}</p>
+          </div>
+          <div class="invoice-details">
+            <p><span>Invoice Date :</span> <strong>${formatDateShort(invoiceDate)}</strong></p>
+            <p><span>Due Date :</span> <strong>${formatDateShort(dueDate)}</strong></p>
+            ${sourceInvoice.orderNumber ? `<p><span>P.O.# :</span> <strong>${sourceInvoice.orderNumber}</strong></p>` : ""}
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th class="col-number">#</th>
+              <th class="col-item">Item & Description</th>
+              <th class="col-qty">Qty</th>
+              <th class="col-rate">${documentTitle === "Packing Slip" ? "Notes" : "Rate"}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHTML}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  const handlePrintInvoice = () => {
+    setIsPdfDropdownOpen(false);
+    if (!invoice) return;
+    openPrintWindow(`Print Invoice ${invoice.invoiceNumber || invoice.id}`, generateInvoiceBodyHTML(invoice));
+  };
+
+  const handlePrintDeliveryNote = () => {
+    setIsPdfDropdownOpen(false);
+    if (!invoice) return;
+    openPrintWindow(`Delivery Note ${invoice.invoiceNumber || invoice.id}`, generateDocumentNoteHTML("Delivery Note", invoice));
+  };
+
+  const handlePrintPackingSlip = () => {
+    setIsPdfDropdownOpen(false);
+    if (!invoice) return;
+    openPrintWindow(`Packing Slip ${invoice.invoiceNumber || invoice.id}`, generateDocumentNoteHTML("Packing Slip", invoice));
   };
 
   const handleRecordPayment = () => {
@@ -2421,6 +2680,329 @@ export default function InvoiceDetail() { // Start of component
         "Locked": "locked"
       };
       navigate(`/sales/invoices?status=${statusMap[filter] || filter.toLowerCase()}`);
+    }
+  };
+
+  const handleToggleSidebarInvoiceSelection = (invoiceId: string) => {
+    setSelectedSidebarInvoices((prev) => {
+      const next = new Set(prev);
+      if (next.has(invoiceId)) {
+        next.delete(invoiceId);
+      } else {
+        next.add(invoiceId);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleAllSidebarInvoices = () => {
+    if (selectedSidebarInvoices.size === invoices.length) {
+      setSelectedSidebarInvoices(new Set());
+      return;
+    }
+    setSelectedSidebarInvoices(new Set(invoices.map((row) => String(row.id))));
+  };
+
+  const handleClearSidebarSelection = () => {
+    setSelectedSidebarInvoices(new Set());
+    setIsSidebarBulkActionsOpen(false);
+  };
+
+  const buildSidebarBulkUpdatePayload = (field: string, value: string) => {
+    const trimmedValue = String(value ?? "").trim();
+    switch (field) {
+      case "Order Number":
+        return { orderNumber: trimmedValue };
+      case "Invoice Date":
+        return { date: trimmedValue, invoiceDate: trimmedValue };
+      case "Due Date":
+        return { dueDate: trimmedValue };
+      case "Expected Payment Date":
+        return { expectedPaymentDate: trimmedValue };
+      case "Payment Terms":
+        return { paymentTerms: trimmedValue };
+      case "Customer Notes":
+        return { notes: trimmedValue, customerNotes: trimmedValue };
+      case "Terms & Conditions":
+        return { terms: trimmedValue, termsAndConditions: trimmedValue };
+      case "Status": {
+        const normalized = trimmedValue.toLowerCase().replace(/\s+/g, " ").trim();
+        const statusMap: Record<string, string> = {
+          draft: "draft",
+          sent: "sent",
+          viewed: "viewed",
+          "customer viewed": "customer_viewed",
+          "partially paid": "partially paid",
+          paid: "paid",
+          overdue: "overdue",
+          void: "void",
+          "pending approval": "pending_approval",
+          approved: "approved",
+          locked: "locked",
+        };
+        return { status: statusMap[normalized] || normalized };
+      }
+      default:
+        return {};
+    }
+  };
+
+  const getSidebarBulkUpdateFieldOptions = (field: string) => {
+    switch (field) {
+      case "Payment Terms":
+        return ["Due on Receipt", "Net 15", "Net 30", "Net 45", "Net 60", "Net 90"];
+      case "Status":
+        return ["Draft", "Sent", "Viewed", "Partially Paid", "Paid", "Overdue", "Void"];
+      default:
+        return [];
+    }
+  };
+
+  const handleOpenSidebarBulkUpdate = () => {
+    setIsSidebarBulkActionsOpen(false);
+    setIsSidebarBulkUpdateModalOpen(true);
+  };
+
+  const handleCloseSidebarBulkUpdate = () => {
+    setIsSidebarBulkUpdateModalOpen(false);
+    setSidebarBulkUpdateField("");
+    setSidebarBulkUpdateValue("");
+    setSidebarBulkUpdateReason("");
+  };
+
+  const handleSidebarBulkUpdateSubmit = async () => {
+    const selectedIds = Array.from(selectedSidebarInvoices);
+    if (!selectedIds.length) {
+      toast("Please select at least one invoice.");
+      return;
+    }
+    if (!sidebarBulkUpdateField || !sidebarBulkUpdateValue.trim()) {
+      toast("Please select a field and enter new information.");
+      return;
+    }
+    if (!sidebarBulkUpdateReason.trim()) {
+      toast("Please enter a reason for bulk updating invoices.");
+      return;
+    }
+
+    const payload = buildSidebarBulkUpdatePayload(sidebarBulkUpdateField, sidebarBulkUpdateValue);
+    if (Object.keys(payload).length === 0) {
+      toast("Selected field is not supported for bulk update.");
+      return;
+    }
+
+    setIsSidebarBulkUpdating(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedIds.map((invoiceId) => updateInvoice(invoiceId, payload as any))
+      );
+
+      const refreshedInvoices = await getInvoices();
+      setInvoices(stripRetainerInvoices(refreshedInvoices as any[]));
+
+      if (id && selectedIds.includes(String(id))) {
+        const refreshedCurrent = await getInvoiceById(String(id));
+        if (refreshedCurrent) {
+          setInvoice(refreshedCurrent);
+        }
+      }
+
+      const successCount = results.filter((result) => result.status === "fulfilled").length;
+      const failedCount = results.length - successCount;
+
+      handleCloseSidebarBulkUpdate();
+      setSelectedSidebarInvoices(new Set());
+
+      if (failedCount === 0) {
+        toast(`Updated ${successCount} invoice(s) successfully.`);
+      } else {
+        toast(`Updated ${successCount} invoice(s). ${failedCount} invoice(s) failed to update.`);
+      }
+    } catch (error) {
+      console.error("Failed to bulk update sidebar invoices:", error);
+      toast("Failed to bulk update invoices. Please try again.");
+    } finally {
+      setIsSidebarBulkUpdating(false);
+    }
+  };
+
+  const handleSidebarMarkAsSent = async () => {
+    const selectedIds = Array.from(selectedSidebarInvoices);
+    if (!selectedIds.length) return;
+
+    try {
+      let refreshedCurrentInvoice: Invoice | null = null;
+
+      for (const invoiceId of selectedIds) {
+        await updateInvoice(invoiceId, {
+          status: "sent",
+          sentAt: new Date().toISOString(),
+        } as any);
+
+        if (String(invoiceId) === String(id)) {
+          refreshedCurrentInvoice = await getInvoiceById(String(invoiceId));
+        }
+      }
+
+      const refreshedInvoices = await getInvoices();
+      setInvoices(stripRetainerInvoices(refreshedInvoices as any[]));
+
+      if (refreshedCurrentInvoice) {
+        setInvoice(refreshedCurrentInvoice);
+      }
+
+      setSelectedSidebarInvoices(new Set());
+      setIsSidebarBulkActionsOpen(false);
+      toast(selectedIds.length === 1
+        ? "Invoice status has been changed to Sent."
+        : `${selectedIds.length} invoice statuses have been changed to Sent.`);
+    } catch (error) {
+      console.error("Failed to mark sidebar invoices as sent:", error);
+      toast("Failed to mark invoices as sent. Please try again.");
+    }
+  };
+
+  const handleSidebarExportAsPdf = async () => {
+    const selectedRows = getSelectedSidebarInvoiceRows();
+    if (!selectedRows.length) return;
+
+    setIsSidebarBulkActionsOpen(false);
+    setIsDownloadingPdf(true);
+    try {
+      for (const selectedInvoice of selectedRows) {
+        const blob = await generateInvoicePdfBlob(selectedInvoice);
+        const fileName = sanitizeExportName(
+          `Invoice-${selectedInvoice.invoiceNumber || selectedInvoice.id}.pdf`,
+          "Invoice.pdf"
+        );
+        downloadBlobFile(blob, fileName);
+      }
+      toast(
+        selectedRows.length === 1
+          ? "Invoice PDF downloaded successfully."
+          : `${selectedRows.length} invoice PDFs downloaded successfully.`
+      );
+    } catch (error) {
+      console.error("Failed to export sidebar invoices as PDF:", error);
+      toast("Failed to export selected invoices as PDF.");
+    } finally {
+      setIsDownloadingPdf(false);
+      setIsSidebarBulkActionsOpen(false);
+    }
+  };
+
+  const handleSidebarExportAsZip = async () => {
+    const selectedRows = getSelectedSidebarInvoiceRows();
+    if (!selectedRows.length) return;
+
+    setIsSidebarBulkActionsOpen(false);
+    setIsDownloadingPdf(true);
+    try {
+      const zip = new JSZip();
+
+      for (const selectedInvoice of selectedRows) {
+        const blob = await generateInvoicePdfBlob(selectedInvoice);
+        const fileName = sanitizeExportName(
+          `Invoice-${selectedInvoice.invoiceNumber || selectedInvoice.id}.pdf`,
+          `invoice-${selectedInvoice.id || Date.now()}.pdf`
+        );
+        zip.file(fileName, blob);
+      }
+
+      const content = await zip.generateAsync({ type: "blob" });
+      downloadBlobFile(
+        content,
+        sanitizeExportName(`Invoices-${new Date().toISOString().slice(0, 10)}.zip`, "Invoices.zip")
+      );
+      toast(
+        selectedRows.length === 1
+          ? "Invoice ZIP exported successfully."
+          : `${selectedRows.length} invoices exported as ZIP successfully.`
+      );
+    } catch (error) {
+      console.error("Failed to export sidebar invoices as ZIP:", error);
+      toast("Failed to export selected invoices as ZIP.");
+    } finally {
+      setIsDownloadingPdf(false);
+      setIsSidebarBulkActionsOpen(false);
+    }
+  };
+
+  const handleSidebarPrint = () => {
+    const selectedRows = getSelectedSidebarInvoiceRows();
+    if (!selectedRows.length) return;
+
+    setIsSidebarBulkActionsOpen(false);
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast("Unable to open print preview. Please allow pop-ups and try again.");
+      return;
+    }
+
+    const bodyMarkup = selectedRows
+      .map((selectedInvoice) => `<div class="print-break">${generateInvoiceBodyHTML(selectedInvoice)}</div>`)
+      .join("");
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Print Invoices</title>
+        <meta charset="UTF-8">
+        <style>${getInvoiceHtmlStyles()}</style>
+      </head>
+      <body>${bodyMarkup}</body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  };
+
+  const handleSidebarDelete = async () => {
+    const selectedRows = getSelectedSidebarInvoiceRows();
+    if (!selectedRows.length) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${selectedRows.length} selected invoice${selectedRows.length > 1 ? "s" : ""}?`
+    );
+    if (!confirmed) return;
+
+    setIsSidebarBulkActionsOpen(false);
+    try {
+      const selectedIds = selectedRows.map((row) => getInvoiceRowId(row));
+      await Promise.all(selectedIds.map((invoiceId) => deleteInvoice(invoiceId)));
+
+      const refreshedInvoices = await getInvoices();
+      const nextInvoices = stripRetainerInvoices(refreshedInvoices as any[]);
+      setInvoices(nextInvoices);
+      setSelectedSidebarInvoices(new Set());
+
+      const currentId = String(id || "");
+      if (currentId && selectedIds.includes(currentId)) {
+        const nextInvoice = nextInvoices[0];
+        if (nextInvoice) {
+          navigate(`/sales/invoices/${getInvoiceRowId(nextInvoice)}`);
+        } else {
+          navigate("/sales/invoices");
+        }
+      } else if (currentId) {
+        const refreshedCurrent = await getInvoiceById(currentId);
+        if (refreshedCurrent) {
+          setInvoice(refreshedCurrent);
+        }
+      }
+
+      toast(
+        selectedIds.length === 1
+          ? "Invoice deleted successfully."
+          : `${selectedIds.length} invoices deleted successfully.`
+      );
+    } catch (error) {
+      console.error("Failed to delete selected sidebar invoices:", error);
+      toast("Failed to delete selected invoices. Please try again.");
     }
   };
 
@@ -2860,6 +3442,106 @@ export default function InvoiceDetail() { // Start of component
     }
   };
 
+  const downloadCsvFile = (rows: string[][], filename: string) => {
+    const csvContent = rows
+      .map((row) =>
+        row
+          .map((value) => `"${String(value ?? "").replace(/"/g, '""')}"`)
+          .join(",")
+      )
+      .join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    downloadBlobFile(blob, filename);
+  };
+
+  const getSidebarExportRows = (invoiceList: Invoice[]) => {
+    const rows = Array.isArray(invoiceList) ? invoiceList : [];
+    return [
+      ["Invoice#", "Date", "Customer Name", "Status", "Due Date", "Amount", "Balance Due", "Location"],
+      ...rows.map((row: any) => [
+        row?.invoiceNumber || row?.id || "",
+        row?.invoiceDate || row?.date || "",
+        row?.customerName || (typeof row?.customer === "string" ? row.customer : row?.customer?.displayName || row?.customer?.name || ""),
+        row?.status || "",
+        row?.dueDate || "",
+        String(getInvoiceDisplayTotal(row) ?? ""),
+        String(row?.balance ?? row?.balanceDue ?? ""),
+        row?.location || row?.locationName || "Head Office",
+      ]),
+    ];
+  };
+
+  const handleSidebarExportAllInvoices = async () => {
+    try {
+      const allInvoices = await getInvoices();
+      const rows = getSidebarExportRows(stripRetainerInvoices(allInvoices as any[]));
+      downloadCsvFile(rows, sanitizeExportName(`all-invoices-${new Date().toISOString().slice(0, 10)}.csv`, "all-invoices.csv"));
+      toast.success("Invoices exported successfully.");
+    } catch (error) {
+      console.error("Failed to export invoices:", error);
+      toast.error("Failed to export invoices.");
+    } finally {
+      setShowSidebarExportSubMenu(false);
+      setShowSidebarMoreDropdown(false);
+    }
+  };
+
+  const handleSidebarExportCurrentView = () => {
+    try {
+      const rows = getSidebarExportRows(invoices);
+      downloadCsvFile(rows, sanitizeExportName(`invoice-view-${new Date().toISOString().slice(0, 10)}.csv`, "invoice-view.csv"));
+      toast.success("Current invoice view exported successfully.");
+    } catch (error) {
+      console.error("Failed to export current view:", error);
+      toast.error("Failed to export current view.");
+    } finally {
+      setShowSidebarExportSubMenu(false);
+      setShowSidebarMoreDropdown(false);
+    }
+  };
+
+  const handleSidebarSort = (sortField: string) => {
+    const normalizeText = (value: any) => String(value || "").toLowerCase().trim();
+    const nextInvoices = [...invoices].sort((a: any, b: any) => {
+      switch (sortField) {
+        case "Created Time":
+          return new Date(b?.createdAt || b?.date || 0).getTime() - new Date(a?.createdAt || a?.date || 0).getTime();
+        case "Last Modified Time":
+          return new Date(b?.updatedAt || b?.modifiedAt || b?.createdAt || 0).getTime() - new Date(a?.updatedAt || a?.modifiedAt || a?.createdAt || 0).getTime();
+        case "Date":
+          return new Date(b?.invoiceDate || b?.date || 0).getTime() - new Date(a?.invoiceDate || a?.date || 0).getTime();
+        case "Invoice#":
+          return normalizeText(a?.invoiceNumber || a?.id).localeCompare(normalizeText(b?.invoiceNumber || b?.id), undefined, { numeric: true });
+        case "Order Number":
+          return normalizeText(a?.orderNumber).localeCompare(normalizeText(b?.orderNumber), undefined, { numeric: true });
+        case "Customer Name":
+          return normalizeText(a?.customerName || a?.customer?.displayName || a?.customer?.name || a?.customer).localeCompare(
+            normalizeText(b?.customerName || b?.customer?.displayName || b?.customer?.name || b?.customer)
+          );
+        case "Due Date":
+          return new Date(b?.dueDate || 0).getTime() - new Date(a?.dueDate || 0).getTime();
+        case "Amount":
+          return Number(b?.total ?? b?.amount ?? 0) - Number(a?.total ?? a?.amount ?? 0);
+        case "Balance Due":
+          return Number(b?.balance ?? b?.balanceDue ?? 0) - Number(a?.balance ?? a?.balanceDue ?? 0);
+        default:
+          return 0;
+      }
+    });
+
+    setInvoices(nextInvoices);
+    setSidebarActiveSortField(sortField);
+    setShowSidebarSortSubMenu(false);
+    setShowSidebarMoreDropdown(false);
+  };
+
+  const handleSidebarResetColumnWidth = () => {
+    setShowSidebarMoreDropdown(false);
+    setShowSidebarSortSubMenu(false);
+    setShowSidebarExportSubMenu(false);
+    toast.info("Sidebar header reset.");
+  };
+
   const filteredStatusOptions = statusFilters.filter(filter =>
     filter.toLowerCase().includes(filterSearch.toLowerCase())
   );
@@ -2972,130 +3654,364 @@ export default function InvoiceDetail() { // Start of component
       <div className="w-full h-[calc(100vh-4rem)] min-h-0 flex bg-[#f8fafc] overflow-hidden">
         {/* Left Sidebar */}
         <div className="w-[320px] lg:w-[320px] md:w-[270px] border-r border-gray-200 bg-white flex flex-col h-full min-h-0 overflow-hidden hidden md:flex">
-          <div className="relative z-20 flex items-center justify-between px-4 h-[74px] border-b border-gray-200">
-            <div className="relative flex-1" ref={allInvoicesDropdownRef}>
+          {selectedSidebarInvoices.size > 0 ? (
+            <div className="relative z-20 flex items-center gap-2 px-3 h-[58px] border-b border-gray-200 bg-white shadow-sm">
               <button
-                onClick={() => setIsAllInvoicesDropdownOpen(!isAllInvoicesDropdownOpen)}
-                className="inline-flex items-center gap-1 text-[18px] font-semibold text-gray-900 cursor-pointer"
+                type="button"
+                onClick={handleToggleAllSidebarInvoices}
+                className="flex items-center justify-center text-gray-400 hover:text-[#2563eb]"
+                aria-label={selectedSidebarInvoices.size === invoices.length ? "Clear sidebar selection" : "Select all invoices"}
               >
-                {isAllInvoicesDropdownOpen ? (
-                  <ChevronUp size={16} className="text-[#156372]" />
+                {selectedSidebarInvoices.size === invoices.length && invoices.length > 0 ? (
+                  <CheckSquare size={18} className="text-[#2563eb]" />
                 ) : (
-                  <ChevronDown size={16} className="text-[#156372]" />
+                  <Square size={18} />
                 )}
-                <span>All Invoices</span>
               </button>
-
-              {/* Filter Dropdown */}
-              {isAllInvoicesDropdownOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50">
-                  {/* Search Bar */}
-                  <div className="flex items-center gap-2 p-3 border-b border-gray-200">
-                    <Search size={16} className="text-gray-500" />
-                    <input
-                      type="text"
-                      placeholder="Search"
-                      value={filterSearch}
-                      onChange={(e) => setFilterSearch(e.target.value)}
-                      className="flex-1 outline-none text-sm text-gray-700"
-                      autoFocus
-                    />
+              <div className="relative" ref={sidebarBulkActionsRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsSidebarBulkActionsOpen((prev) => !prev)}
+                  className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border border-gray-300 bg-white px-3 text-[12px] font-medium text-gray-800 hover:bg-gray-50"
+                >
+                  <span>Bulk Actions</span>
+                  <ChevronDown size={12} />
+                </button>
+                {isSidebarBulkActionsOpen && (
+                  <div className="absolute left-0 top-full mt-2 min-w-[180px] rounded-md border border-gray-200 bg-white shadow-lg z-[140]">
+                    <button
+                      type="button"
+                      onClick={handleOpenSidebarBulkUpdate}
+                      className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      Bulk Update
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSidebarExportAsPdf}
+                      className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      Export as PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSidebarExportAsZip}
+                      className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      Export as ZIP (File)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSidebarPrint}
+                      className="w-full border-b border-gray-100 text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      Print
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSidebarMarkAsSent}
+                      className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      Mark As Sent
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSidebarDelete}
+                      className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      Delete
+                    </button>
                   </div>
+                )}
+              </div>
+              <div className="h-5 w-px bg-gray-200" />
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 min-w-[24px] items-center justify-center rounded-full bg-[#e8f0ff] px-2 text-[12px] font-semibold text-[#2563eb]">
+                  {selectedSidebarInvoices.size}
+                </span>
+                <span className="text-[13px] text-gray-800 whitespace-nowrap">Selected</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleClearSidebarSelection}
+                className="ml-auto text-red-500 hover:text-red-600"
+                aria-label="Clear sidebar selection"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ) : (
+            <div className="relative z-20 flex items-center justify-between px-4 h-[74px] border-b border-gray-200">
+              <div className="relative flex-1" ref={allInvoicesDropdownRef}>
+                <button
+                  onClick={() => {
+                    updateAllInvoicesDropdownPosition();
+                    setIsAllInvoicesDropdownOpen(!isAllInvoicesDropdownOpen);
+                  }}
+                  className="inline-flex items-center gap-1 text-[18px] font-semibold text-gray-900 cursor-pointer"
+                >
+                  {isAllInvoicesDropdownOpen ? (
+                    <ChevronUp size={16} className="text-[#156372]" />
+                  ) : (
+                    <ChevronDown size={16} className="text-[#156372]" />
+                  )}
+                  <span>All Invoices</span>
+                </button>
 
-                  {/* Filter Options */}
-                  <div className="max-h-60 overflow-y-auto">
-                    {filteredStatusOptions.map((filter) => (
-                      <div
-                        key={filter}
-                        onClick={() => handleFilterSelect(filter)}
-                        className="flex items-center justify-between px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
-                      >
-                        <span>{filter}</span>
-                        <Star size={16} className="text-gray-400 hover:text-yellow-500 cursor-pointer" />
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* New Custom View */}
-                  <div
-                    onClick={() => {
-                      setIsAllInvoicesDropdownOpen(false);
-                      navigate("/sales/invoices/custom-view/new");
-                    }}
-                    className="flex items-center gap-2 px-4 py-3 border-t border-gray-200 bg-gray-50 text-sm font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
+              </div>
+              <div className="relative ml-2" ref={sidebarCreateRef}>
+                <div className="flex overflow-hidden rounded-md border border-[#0D4A52] shadow-sm">
+                  <button
+                    className="flex h-8 items-center justify-center bg-[#156372] px-3 text-white hover:bg-[#0D4A52]"
+                    onClick={() => navigate("/sales/invoices/new")}
+                    title="New Invoice"
                   >
                     <Plus size={16} />
-                    New Custom View
-                  </div>
+                  </button>
+                  <button
+                    className="flex h-8 items-center justify-center border-l border-white/30 bg-[#156372] px-2 text-white hover:bg-[#0D4A52]"
+                    onClick={() => {
+                      updateSidebarCreateDropdownPosition();
+                      setShowSidebarCreateDropdown((prev) => !prev);
+                    }}
+                    title="Create More"
+                  >
+                    <ChevronDown size={14} />
+                  </button>
                 </div>
-              )}
+              </div>
+              <div className="relative ml-2" ref={sidebarMoreRef}>
+                <button
+                  className="rounded-md border border-gray-200 bg-white p-2 text-gray-600 shadow-sm transition-colors hover:bg-gray-50"
+                  onClick={() => {
+                    updateSidebarMoreDropdownPosition();
+                    setShowSidebarMoreDropdown((prev) => !prev);
+                  }}
+                  title="More"
+                >
+                  <MoreHorizontal size={16} />
+                </button>
+              </div>
             </div>
-            <div className="relative flex items-center gap-2 ml-2" ref={sidebarMoreRef}>
-              <button
-                className="p-2 rounded-md cursor-pointer text-white border border-[#0D4A52] shadow-sm bg-[#156372] hover:bg-[#0D4A52]"
-                onClick={() => navigate("/sales/invoices/new")}
-                title="New Invoice"
+          )}
+          {isAllInvoicesDropdownOpen && typeof document !== "undefined" && createPortal(
+            <div
+              ref={allInvoicesDropdownMenuRef}
+              className="fixed z-[260] rounded-md border border-gray-200 bg-white shadow-lg"
+              style={{
+                top: allInvoicesDropdownPosition.top,
+                left: allInvoicesDropdownPosition.left,
+                width: allInvoicesDropdownPosition.width,
+              }}
+            >
+              <div className="flex items-center gap-2 border-b border-gray-200 p-3">
+                <Search size={16} className="text-gray-500" />
+                <input
+                  type="text"
+                  placeholder="Search"
+                  value={filterSearch}
+                  onChange={(e) => setFilterSearch(e.target.value)}
+                  className="flex-1 text-sm text-gray-700 outline-none"
+                  autoFocus
+                />
+              </div>
+
+              <div className="max-h-60 overflow-y-auto">
+                {filteredStatusOptions.map((filter) => (
+                  <div
+                    key={filter}
+                    onClick={() => handleFilterSelect(filter)}
+                    className="flex cursor-pointer items-center justify-between px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    <span>{filter}</span>
+                    <Star size={16} className="cursor-pointer text-gray-400 hover:text-yellow-500" />
+                  </div>
+                ))}
+              </div>
+
+              <div
+                onClick={() => {
+                  setIsAllInvoicesDropdownOpen(false);
+                  navigate("/sales/invoices/custom-view/new");
+                }}
+                className="flex cursor-pointer items-center gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-100"
               >
                 <Plus size={16} />
+                New Custom View
+              </div>
+            </div>,
+            document.body
+          )}
+          {showSidebarCreateDropdown && typeof document !== "undefined" && createPortal(
+            <div
+              ref={sidebarCreateMenuRef}
+              className="fixed z-[260] w-[160px] rounded-lg border border-gray-100 bg-white py-2 shadow-xl"
+              style={{
+                top: sidebarCreateDropdownPosition.top,
+                left: sidebarCreateDropdownPosition.left,
+              }}
+            >
+              <button
+                className="w-full px-4 py-2 text-left text-sm text-slate-600 transition-colors hover:bg-[#1b5e6a] hover:text-white"
+                onClick={() => {
+                  setShowSidebarCreateDropdown(false);
+                  navigate("/sales/invoices/new");
+                }}
+              >
+                New Invoice
               </button>
               <button
-                className="p-2 text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer border border-gray-200"
-                onClick={() => setShowSidebarMoreDropdown((prev) => !prev)}
-                title="More"
+                className="w-full px-4 py-2 text-left text-sm text-slate-600 transition-colors hover:bg-[#1b5e6a] hover:text-white"
+                onClick={() => {
+                  setShowSidebarCreateDropdown(false);
+                  handleCreateCreditNote();
+                }}
               >
-                <MoreHorizontal size={16} />
+                New Credit Note
               </button>
-              {showSidebarMoreDropdown && (
-                <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-[120] min-w-[220px]">
-                  <button
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    onClick={() => {
-                      setShowSidebarMoreDropdown(false);
-                      navigate("/sales/invoices?sort=created_time");
-                    }}
-                  >
-                    Sort by
-                  </button>
-                  <button
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    onClick={() => {
-                      setShowSidebarMoreDropdown(false);
-                      navigate("/sales/invoices/import");
-                    }}
-                  >
-                    Import Invoices
-                  </button>
-                  <button
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    onClick={() => {
-                      setShowSidebarMoreDropdown(false);
-                      navigate("/settings/invoices");
-                    }}
-                  >
-                    Preferences
-                  </button>
-                  <button
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    onClick={async () => {
-                      setShowSidebarMoreDropdown(false);
-                      await handleRefreshSidebarInvoices();
-                    }}
-                  >
-                    Refresh List
-                  </button>
-                  <button
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    onClick={() => {
-                      setShowSidebarMoreDropdown(false);
-                      navigate("/sales/invoices");
-                    }}
-                  >
-                    Go To List
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+              <button
+                className="w-full px-4 py-2 text-left text-sm text-slate-600 transition-colors hover:bg-[#1b5e6a] hover:text-white"
+                onClick={() => {
+                  setShowSidebarCreateDropdown(false);
+                  handleCreateDebitNote();
+                }}
+              >
+                New Debit Note
+              </button>
+            </div>,
+            document.body
+          )}
+          {showSidebarMoreDropdown && typeof document !== "undefined" && createPortal(
+            <div
+              ref={sidebarMoreMenuRef}
+              className="fixed z-[260] w-56 rounded-lg border border-gray-100 bg-white py-2 shadow-xl"
+              style={{
+                top: sidebarMoreDropdownPosition.top,
+                left: sidebarMoreDropdownPosition.left,
+              }}
+            >
+              <div className="relative">
+                <button
+                  className={`mx-2 flex w-[calc(100%-16px)] items-center justify-between rounded-md px-3 py-2 text-sm transition-colors ${showSidebarSortSubMenu ? "bg-[#1b5e6a] text-white shadow-sm" : "text-slate-600 hover:bg-[#1b5e6a] hover:text-white"}`}
+                  onClick={() => {
+                    setShowSidebarSortSubMenu((prev) => !prev);
+                    setShowSidebarExportSubMenu(false);
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <ArrowUpDown size={15} />
+                    <span className="font-medium">Sort by</span>
+                  </div>
+                  <ChevronRight size={14} />
+                </button>
+                {showSidebarSortSubMenu && (
+                  <div className="absolute left-full top-0 z-[270] ml-2 w-48 rounded-lg border border-gray-100 bg-white py-2 shadow-xl">
+                    {sidebarSortOptions.map((option) => (
+                      <button
+                        key={option}
+                        className={`w-full px-4 py-2 text-left text-sm transition-colors ${sidebarActiveSortField === option ? "bg-[#1b5e6a] font-semibold text-white" : "text-slate-600 hover:bg-teal-50"}`}
+                        onClick={() => handleSidebarSort(option)}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <button
+                className="flex w-full items-center gap-3 px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-[#1b5e6a] hover:text-white"
+                onClick={handleImportInvoices}
+              >
+                <Download size={15} />
+                <span className="font-medium">Import Invoices</span>
+              </button>
+
+              <div className="relative">
+                <button
+                  className={`mx-2 flex w-[calc(100%-16px)] items-center justify-between rounded-md px-3 py-2 text-sm transition-colors ${showSidebarExportSubMenu ? "bg-[#1b5e6a] text-white shadow-sm" : "text-slate-600 hover:bg-[#1b5e6a] hover:text-white"}`}
+                  onClick={() => {
+                    setShowSidebarExportSubMenu((prev) => !prev);
+                    setShowSidebarSortSubMenu(false);
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <Upload size={15} />
+                    <span className="font-medium">Export</span>
+                  </div>
+                  <ChevronRight size={14} />
+                </button>
+                {showSidebarExportSubMenu && (
+                  <div className="absolute left-full top-0 z-[270] ml-2 w-48 rounded-lg border border-gray-100 bg-white py-2 shadow-xl">
+                    <button
+                      className="w-full px-4 py-2 text-left text-sm text-slate-600 transition-colors hover:bg-[#1b5e6a] hover:text-white"
+                      onClick={handleSidebarExportAllInvoices}
+                    >
+                      Export Invoices
+                    </button>
+                    <button
+                      className="w-full px-4 py-2 text-left text-sm text-slate-600 transition-colors hover:bg-[#1b5e6a] hover:text-white"
+                      onClick={handleSidebarExportCurrentView}
+                    >
+                      Export Current View
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="mx-2 my-1 h-px bg-gray-100" />
+
+              <button
+                className="flex w-full items-center gap-3 px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-[#1b5e6a] hover:text-white"
+                onClick={() => {
+                  setShowSidebarMoreDropdown(false);
+                  navigate("/settings/invoices");
+                }}
+              >
+                <Settings size={15} />
+                <span className="font-medium">Preferences</span>
+              </button>
+              <button
+                className="flex w-full items-center gap-3 px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-[#1b5e6a] hover:text-white"
+                onClick={() => {
+                  setShowSidebarMoreDropdown(false);
+                  setIsFieldCustomizationOpen(true);
+                }}
+              >
+                <Pencil size={15} />
+                <span className="font-medium">Manage Custom Fields</span>
+              </button>
+              <button
+                className="flex w-full items-center gap-3 px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-[#1b5e6a] hover:text-white"
+                onClick={() => {
+                  setShowSidebarMoreDropdown(false);
+                  navigate("/settings/online-payments");
+                }}
+              >
+                <Banknote size={15} />
+                <span className="font-medium">Online Payments</span>
+              </button>
+              <div className="mx-2 my-1 h-px bg-gray-100" />
+              <button
+                className="flex w-full items-center gap-3 px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-[#1b5e6a] hover:text-white"
+                onClick={async () => {
+                  setShowSidebarMoreDropdown(false);
+                  await handleRefreshSidebarInvoices();
+                }}
+              >
+                <RotateCw size={15} />
+                <span className="font-medium">Refresh List</span>
+              </button>
+              <button
+                className="flex w-full items-center gap-3 px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-[#1b5e6a] hover:text-white"
+                onClick={handleSidebarResetColumnWidth}
+              >
+                <Repeat size={15} />
+                <span className="font-medium">Reset Column Width</span>
+              </button>
+            </div>,
+            document.body
+          )}
           <div className="flex-1 overflow-y-auto">
             {invoices.map((inv) => (
               <div
@@ -3104,7 +4020,21 @@ export default function InvoiceDetail() { // Start of component
                 className={`flex items-center gap-3 p-3 cursor-pointer border-b border-gray-100 hover:bg-gray-50 ${inv.id === id ? "bg-blue-50 border-l-4 border-l-blue-600" : ""
                   }`}
               >
-                <Square size={14} className="text-gray-400 cursor-pointer" />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleSidebarInvoiceSelection(String(inv.id));
+                  }}
+                  className="flex items-center justify-center text-gray-400 hover:text-[#2563eb]"
+                  aria-label={selectedSidebarInvoices.has(String(inv.id)) ? "Deselect invoice" : "Select invoice"}
+                >
+                  {selectedSidebarInvoices.has(String(inv.id)) ? (
+                    <CheckSquare size={18} className="text-[#2563eb]" />
+                  ) : (
+                    <Square size={18} />
+                  )}
+                </button>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-gray-900 truncate mb-1">{inv.customerName || (typeof inv.customer === 'string' ? inv.customer : inv.customer?.displayName || inv.customer?.name || "-")}</div>
                   <div className="text-sm font-medium text-gray-900 mb-1">{formatCurrency(getInvoiceDisplayTotal(inv), inv.currency)}</div>
@@ -3321,14 +4251,54 @@ export default function InvoiceDetail() { // Start of component
                 Share
               </button>
 
-              <button
-                onClick={isDownloadingPdf ? undefined : handleDownloadPDF}
-                disabled={isDownloadingPdf}
-                className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-100 cursor-pointer disabled:opacity-60"
-              >
-                <FileText size={13} className={isDownloadingPdf ? "animate-pulse" : ""} />
-                {isDownloadingPdf ? "Downloading..." : "PDF"}
-              </button>
+              <div className="relative" ref={pdfDropdownRef}>
+                <button
+                  onClick={() => setIsPdfDropdownOpen((prev) => !prev)}
+                  disabled={isDownloadingPdf}
+                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-100 cursor-pointer disabled:opacity-60"
+                >
+                  <FileText size={13} className={isDownloadingPdf ? "animate-pulse" : ""} />
+                  {isDownloadingPdf ? "Downloading..." : "PDF/Print"}
+                  <ChevronDown size={13} />
+                </button>
+                {isPdfDropdownOpen && (
+                  <div className="absolute left-0 top-full z-[220] mt-1 min-w-[170px] overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg">
+                    <button
+                      type="button"
+                      onClick={isDownloadingPdf ? undefined : () => handleDownloadPDF()}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                      disabled={isDownloadingPdf}
+                    >
+                      <FileText size={14} />
+                      <span>PDF</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePrintInvoice}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <FileText size={14} />
+                      <span>Print</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePrintDeliveryNote}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <FileText size={14} />
+                      <span>Print Delivery Note</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePrintPackingSlip}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <FileText size={14} />
+                      <span>Print Packing Slip</span>
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {invoice && canRecordPayment && (
                 <button
@@ -4086,6 +5056,107 @@ export default function InvoiceDetail() { // Start of component
               setShowShareModal={setShowShareModal}
             />
           </Suspense>
+        )}
+
+        {isSidebarBulkUpdateModalOpen && (
+          <div
+            className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40 px-4"
+            onClick={handleCloseSidebarBulkUpdate}
+          >
+            <div
+              className="w-full max-w-[560px] rounded-xl bg-white shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+                <h2 className="text-lg font-semibold text-gray-900">Bulk Update Invoices</h2>
+                <button
+                  type="button"
+                  onClick={handleCloseSidebarBulkUpdate}
+                  className="text-gray-400 hover:text-gray-600"
+                  aria-label="Close bulk update modal"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="space-y-4 px-5 py-5">
+                <p className="text-sm text-gray-600">
+                  Choose a field from the dropdown and update the selected invoices with the new information.
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="space-y-2">
+                    <span className="text-sm font-medium text-gray-700">Field</span>
+                    <select
+                      value={sidebarBulkUpdateField}
+                      onChange={(e) => {
+                        setSidebarBulkUpdateField(e.target.value);
+                        setSidebarBulkUpdateValue("");
+                      }}
+                      className="h-11 w-full rounded-md border border-gray-300 px-3 text-sm text-gray-700 outline-none focus:border-[#156372]"
+                    >
+                      <option value="">Select a field</option>
+                      {["Order Number", "Invoice Date", "Due Date", "Expected Payment Date", "Payment Terms", "Customer Notes", "Terms & Conditions", "Status"].map((field) => (
+                        <option key={field} value={field}>
+                          {field}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="space-y-2">
+                    <span className="text-sm font-medium text-gray-700">Value</span>
+                    {getSidebarBulkUpdateFieldOptions(sidebarBulkUpdateField).length > 0 ? (
+                      <select
+                        value={sidebarBulkUpdateValue}
+                        onChange={(e) => setSidebarBulkUpdateValue(e.target.value)}
+                        className="h-11 w-full rounded-md border border-gray-300 px-3 text-sm text-gray-700 outline-none focus:border-[#156372]"
+                      >
+                        <option value="">Select a value</option>
+                        {getSidebarBulkUpdateFieldOptions(sidebarBulkUpdateField).map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type={sidebarBulkUpdateField.toLowerCase().includes("date") ? "date" : "text"}
+                        value={sidebarBulkUpdateValue}
+                        onChange={(e) => setSidebarBulkUpdateValue(e.target.value)}
+                        placeholder="Enter information"
+                        className="h-11 w-full rounded-md border border-gray-300 px-3 text-sm text-gray-700 outline-none focus:border-[#156372]"
+                      />
+                    )}
+                  </label>
+                </div>
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium text-gray-700">Reason</span>
+                  <textarea
+                    value={sidebarBulkUpdateReason}
+                    onChange={(e) => setSidebarBulkUpdateReason(e.target.value)}
+                    rows={4}
+                    placeholder="Please enter the reason for this bulk update"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#156372]"
+                  />
+                </label>
+              </div>
+              <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-5 py-4">
+                <button
+                  type="button"
+                  onClick={handleCloseSidebarBulkUpdate}
+                  className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSidebarBulkUpdateSubmit}
+                  disabled={isSidebarBulkUpdating}
+                  className="rounded-md bg-[#156372] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0f4f5b] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSidebarBulkUpdating ? "Updating..." : "Update"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {attachmentDeleteConfirmIndex !== null && (
