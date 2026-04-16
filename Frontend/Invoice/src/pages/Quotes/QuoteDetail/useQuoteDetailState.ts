@@ -66,6 +66,23 @@ const mergeQuoteDetail = (prev: any, next: any) => {
   return merged;
 };
 
+const normalizeQuoteId = (quote: any) => String(quote?.id || quote?._id || "").trim();
+
+const dedupeQuotesById = (quotes: any[]) => {
+  if (!Array.isArray(quotes)) return [];
+  const seen = new Set<string>();
+  const next: any[] = [];
+  for (const quote of quotes) {
+    const id = normalizeQuoteId(quote);
+    if (id) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+    }
+    next.push(quote);
+  }
+  return next;
+};
+
 export const useQuoteDetailState = (
   args: QuoteDetailStateArgs,
   deps: QuoteDetailDeps,
@@ -89,13 +106,14 @@ export const useQuoteDetailState = (
     : queryClient
         .getQueriesData<any[]>({ queryKey: quoteQueryKeys.lists() })
         .flatMap(([, rows]) => (Array.isArray(rows) ? rows : []));
+  const uniqueCachedQuotes = dedupeQuotesById(cachedQuotes);
   const cachedDetail = preloadedQuote ? null : readStoredQuoteDetail();
   const cachedQuote =
     preloadedQuote ||
     cachedDetail ||
     queryClient.getQueryData<any>(quoteQueryKeys.detail(quoteId)) ||
-    cachedQuotes.find((q: any) => {
-      const candidateId = String(q?.id || q?._id || "");
+    uniqueCachedQuotes.find((q: any) => {
+      const candidateId = normalizeQuoteId(q);
       return Boolean(candidateId) && candidateId === quoteId;
     }) ||
     null;
@@ -111,7 +129,7 @@ export const useQuoteDetailState = (
   const resolveVerifiedPrimarySenderDep = deps.resolveVerifiedPrimarySender || resolveVerifiedPrimarySender;
 
   const [quote, setQuote] = useState<any>(cachedQuote);
-  const [allQuotes, setAllQuotes] = useState<any[]>(cachedQuotes);
+  const [allQuotes, setAllQuotes] = useState<any[]>(uniqueCachedQuotes);
   const [loading, setLoading] = useState(!cachedQuote);
   const [baseCurrency, setBaseCurrency] = useState("USD");
   const [activeTab, setActiveTab] = useState("details");
@@ -204,6 +222,14 @@ export const useQuoteDetailState = (
   const [commentBold, setCommentBold] = useState(false);
   const [commentItalic, setCommentItalic] = useState(false);
   const [commentUnderline, setCommentUnderline] = useState(false);
+
+  const setUniqueAllQuotes = (nextValue: any) => {
+    if (typeof nextValue === "function") {
+      setAllQuotes((prev) => dedupeQuotesById(nextValue(prev)));
+      return;
+    }
+    setAllQuotes(dedupeQuotesById(nextValue));
+  };
 
   const [showCustomFieldsModal, setShowCustomFieldsModal] = useState(false);
   const [customFields, setCustomFields] = useState([
@@ -380,9 +406,9 @@ export const useQuoteDetailState = (
       setQuote(cachedQuote);
     }
     if (preloadedQuotes.length > 0) {
-      setAllQuotes(preloadedQuotes);
+      setUniqueAllQuotes(preloadedQuotes);
     } else if (cachedQuotes.length > 0) {
-      setAllQuotes(cachedQuotes);
+      setUniqueAllQuotes(cachedQuotes);
     }
   }, [preloadedQuote, preloadedQuotes, cachedQuote, cachedDetail, cachedQuotes, quoteId]);
 
@@ -403,10 +429,10 @@ export const useQuoteDetailState = (
       if (cancelled) return;
 
       if (quotesResult.status === "fulfilled") {
-        setAllQuotes(quotesResult.value || []);
+        setUniqueAllQuotes(quotesResult.value || []);
       } else {
         console.error("Error loading quotes:", quotesResult.reason);
-        setAllQuotes([]);
+        setUniqueAllQuotes([]);
       }
 
       if (dropdownsResult.status === "fulfilled") {
@@ -663,7 +689,7 @@ export const useQuoteDetailState = (
     quote,
     setQuote,
     allQuotes,
-    setAllQuotes,
+    setAllQuotes: setUniqueAllQuotes,
     loading,
     setLoading,
     baseCurrency,

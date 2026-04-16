@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { getSalesReceiptById } from "../../salesModel";
+import { formatSalesReceiptNumber, getSalesReceiptById } from "../../salesModel";
 import { salesReceiptsAPI, senderEmailsAPI } from "../../../services/api";
 import { X, Bold, Italic, Underline, Strikethrough, Link as LinkIcon, Image as ImageIcon, Paperclip, Loader2 } from "lucide-react";
 import { formatSenderDisplay, resolveVerifiedPrimarySender } from "../../../utils/emailSenderDisplay";
@@ -20,7 +20,7 @@ const parseAmount = (value: any) => {
 };
 
 const buildSalesReceiptEmailTemplate = (receipt: any) => {
-  const receiptNumber = receipt?.receiptNumber || receipt?.id || "SR-00001";
+  const receiptNumber = formatSalesReceiptNumber(receipt?.receiptNumber || receipt?.id || "SR00001") || "SR00001";
   const receiptDate = formatDisplayDate(receipt?.receiptDate || receipt?.date || new Date());
   const currency = String(receipt?.currency || "USD").toUpperCase();
   const amountPaid = `${currency}${parseAmount(receipt?.total ?? receipt?.amount ?? 0).toFixed(2)}`;
@@ -30,7 +30,7 @@ const buildSalesReceiptEmailTemplate = (receipt: any) => {
   return `
     <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto; color: #111827; background-color: #f8fafc; padding: 24px 0;">
       <div style="background-color: #187bff; color: #fff; text-align: center; padding: 14px 0; font-size: 18px; font-weight: 600;">
-        SalesReceipt# ${receiptNumber}
+        SalesReceipt ${receiptNumber}
       </div>
       <div style="background-color: #ffffff; border: 1px solid #dee2e6; margin: 0 24px; border-radius: 6px; padding: 24px;">
         <p style="font-size: 15px; margin: 0 0 8px 0;">Dear ${customerName},</p>
@@ -324,7 +324,7 @@ export default function SendSalesReceiptEmail() {
                     <path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" />
                   </svg>
                 </div>
-                <span className="text-sm text-gray-700 font-medium">{receiptData.receiptNumber || "SR-00001"}</span>
+                <span className="text-sm text-gray-700 font-medium">{formatSalesReceiptNumber(receiptData.receiptNumber || "SR00001") || "SR00001"}</span>
               </div>
             )}
 

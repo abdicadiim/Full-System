@@ -2038,7 +2038,7 @@ export default function NewProjectForm() {
                 <ChevronDown className="w-4 h-4 rotate-90" />
               </button>
               <div className="flex items-center px-3 text-[13px] text-gray-700">
-                {advancedSearchResults.length === 0 ? "0 - 0" : `${startIndex + 1} - ${Math.min(startIndex + itemsPerPage, advancedSearchResults.length)}`}
+                {advancedSearchResults.length === 0 ? "0 to 0" : `${startIndex + 1} to ${Math.min(startIndex + itemsPerPage, advancedSearchResults.length)}`}
               </div>
               <button
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}

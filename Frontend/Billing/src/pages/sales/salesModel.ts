@@ -1523,6 +1523,9 @@ export interface Quote {
   discountAccount?: string;
   shippingCharges?: number;
   shippingChargeTax?: string;
+  shippingTaxAmount?: number;
+  shippingTaxName?: string;
+  shippingTaxRate?: number;
   adjustment?: number;
   roundOff?: number;
   total: number;
@@ -1644,6 +1647,9 @@ export const mapQuoteFromApi = (quote: any): Quote => {
     discountAccount: quote?.discountAccount || 'General Income',
     shippingCharges: Number(quote?.shippingCharges || 0) || 0,
     shippingChargeTax: String(quote?.shippingChargeTax || ''),
+    shippingTaxAmount: Number(quote?.shippingTaxAmount ?? quote?.shippingTax ?? 0) || 0,
+    shippingTaxName: String(quote?.shippingTaxName || ''),
+    shippingTaxRate: Number(quote?.shippingTaxRate || 0) || 0,
     adjustment: Number(quote?.adjustment || 0) || 0,
     roundOff: Number(quote?.roundOff || 0) || 0,
     total: Number(quote?.total || 0) || 0,

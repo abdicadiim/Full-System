@@ -958,7 +958,7 @@ export default function AddonDetailPage() {
                     </p>
                     <div className="flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-[14px] text-[#0f172a]">
                       <ChevronLeft size={12} className="text-[#9ca3af]" />
-                      <span>{addonPlans.length === 0 ? "0 - 0" : `1 - ${addonPlans.length}`}</span>
+                      <span>{addonPlans.length === 0 ? "0 to 0" : `1 to ${addonPlans.length}`}</span>
                       <ChevronRight size={12} className="text-[#9ca3af]" />
                     </div>
                   </div>
@@ -1030,7 +1030,7 @@ export default function AddonDetailPage() {
                     </p>
                     <div className="flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-[14px] text-[#0f172a]">
                       <ChevronLeft size={12} className="text-[#9ca3af]" />
-                      <span>{addonPriceLists.length === 0 ? "0 - 0" : `1 - ${addonPriceLists.length}`}</span>
+                      <span>{addonPriceLists.length === 0 ? "0 to 0" : `1 to ${addonPriceLists.length}`}</span>
                       <ChevronRight size={12} className="text-[#9ca3af]" />
                     </div>
                   </div>

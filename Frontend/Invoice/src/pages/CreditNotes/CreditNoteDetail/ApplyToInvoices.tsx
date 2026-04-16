@@ -236,7 +236,7 @@ const ApplyToInvoices: React.FC<ApplyToInvoicesProps> = ({ isOpen, onClose, cred
                                     <FileText size={20} />
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="text-xs text-gray-500 font-medium uppercase">Credit Note#</span>
+                                    <span className="text-xs text-gray-500 font-medium uppercase">Credit Note</span>
                                     <span className="text-sm font-bold text-gray-900">{creditNote?.creditNoteNumber}</span>
                                 </div>
                             </div>

@@ -1302,7 +1302,16 @@ const QuoteDetail = () => {
   };
 
   const handleEdit = () => {
-    navigate(`/sales/quotes/${quoteId}/edit`);
+    if (quote && typeof window !== "undefined" && quoteId) {
+      try {
+        localStorage.setItem(`quote_edit_${quoteId}`, JSON.stringify(quote));
+      } catch {
+        // best effort only
+      }
+    }
+    navigate(`/sales/quotes/${quoteId}/edit`, {
+      state: { preloadedQuote: quote, preloadedQuotes: allQuotes },
+    });
   };
 
   const handleConvertToInvoice = () => {
@@ -1768,36 +1777,26 @@ const QuoteDetail = () => {
               (Applied on ${formatCurrency(totalsMeta.discountBase, quote.currency)})
             </div>
             ` : ''}
-            ${totalsMeta.taxAmount > 0 ? `
             <div class="totals-row">
               <span>${totalsMeta.taxLabel}</span>
               <span>${formatCurrency(totalsMeta.taxAmount, quote.currency)}</span>
             </div>
-            ` : ''}
-            ${totalsMeta.shippingCharges !== 0 ? `
             <div class="totals-row">
               <span>Shipping charge</span>
               <span>${formatCurrency(totalsMeta.shippingCharges, quote.currency)}</span>
             </div>
-            ` : ''}
-            ${totalsMeta.shippingTaxAmount > 0 ? `
             <div class="totals-row">
               <span>${totalsMeta.shippingTaxLabel}</span>
               <span>${formatCurrency(totalsMeta.shippingTaxAmount, quote.currency)}</span>
             </div>
-            ` : ''}
-            ${totalsMeta.adjustment !== 0 ? `
             <div class="totals-row">
               <span>Adjustment</span>
               <span>${formatCurrency(totalsMeta.adjustment, quote.currency)}</span>
             </div>
-            ` : ''}
-            ${totalsMeta.roundOff !== 0 ? `
             <div class="totals-row">
               <span>Round Off</span>
               <span>${formatCurrency(totalsMeta.roundOff, quote.currency)}</span>
             </div>
-            ` : ''}
             <div class="totals-row total">
               <span>Total</span>
               <span>${formatCurrency(totalsMeta.total, quote.currency)}</span>
@@ -2049,36 +2048,26 @@ const QuoteDetail = () => {
             (Applied on ${formatCurrency(totalsMeta.discountBase, quoteData.currency)})
           </div>
           ` : ''}
-          ${totalsMeta.taxAmount > 0 ? `
           <div class="total-row">
             <span class="total-label">${totalsMeta.taxLabel}</span>
             <span class="total-value">${formatCurrency(totalsMeta.taxAmount || 0, quoteData.currency)}</span>
           </div>
-          ` : ''}
-          ${totalsMeta.shippingCharges !== 0 ? `
           <div class="total-row">
             <span class="total-label">Shipping charge</span>
             <span class="total-value">${formatCurrency(totalsMeta.shippingCharges, quoteData.currency)}</span>
           </div>
-          ` : ''}
-          ${totalsMeta.shippingTaxAmount > 0 ? `
           <div class="total-row">
             <span class="total-label">${totalsMeta.shippingTaxLabel}</span>
             <span class="total-value">${formatCurrency(totalsMeta.shippingTaxAmount, quoteData.currency)}</span>
           </div>
-          ` : ''}
-          ${totalsMeta.adjustment !== 0 ? `
           <div class="total-row">
             <span class="total-label">Adjustment</span>
             <span class="total-value">${formatCurrency(totalsMeta.adjustment, quoteData.currency)}</span>
           </div>
-          ` : ''}
-          ${totalsMeta.roundOff !== 0 ? `
           <div class="total-row">
             <span class="total-label">Round Off</span>
             <span class="total-value">${formatCurrency(totalsMeta.roundOff, quoteData.currency)}</span>
           </div>
-          ` : ''}
           <div class="total-row final">
             <span>Total</span>
             <span>${formatCurrency(totalsMeta.total, quoteData.currency)}</span>
@@ -3833,46 +3822,36 @@ const QuoteDetail = () => {
                           </div>
                         </>
                       )}
-                      {quoteTotalsMeta.taxAmount > 0 && (
-                        <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
-                          <span>{quoteTotalsMeta.taxLabel}</span>
-                          <span style={{ color: "#111827", fontWeight: "500" }}>
-                            {formatCurrency(quoteTotalsMeta.taxAmount, quote.currency)}
-                          </span>
-                        </div>
-                      )}
-                      {quoteTotalsMeta.shippingCharges !== 0 && (
-                        <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
-                          <span>Shipping charge</span>
-                          <span style={{ color: "#111827", fontWeight: "500" }}>
-                            {formatCurrency(quoteTotalsMeta.shippingCharges, quote.currency)}
-                          </span>
-                        </div>
-                      )}
-                      {quoteTotalsMeta.shippingTaxAmount > 0 && (
-                        <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
-                          <span>{quoteTotalsMeta.shippingTaxLabel}</span>
-                          <span style={{ color: "#111827", fontWeight: "500" }}>
-                            {formatCurrency(quoteTotalsMeta.shippingTaxAmount, quote.currency)}
-                          </span>
-                        </div>
-                      )}
-                      {quoteTotalsMeta.adjustment !== 0 && (
-                        <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
-                          <span>Adjustment</span>
-                          <span style={{ color: "#111827", fontWeight: "500" }}>
-                            {formatCurrency(quoteTotalsMeta.adjustment, quote.currency)}
-                          </span>
-                        </div>
-                      )}
-                      {quoteTotalsMeta.roundOff !== 0 && (
-                        <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
-                          <span>Round Off</span>
-                          <span style={{ color: "#111827", fontWeight: "500" }}>
-                            {formatCurrency(quoteTotalsMeta.roundOff, quote.currency)}
-                          </span>
-                        </div>
-                      )}
+                      <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
+                        <span>{quoteTotalsMeta.taxLabel}</span>
+                        <span style={{ color: "#111827", fontWeight: "500" }}>
+                          {formatCurrency(quoteTotalsMeta.taxAmount, quote.currency)}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
+                        <span>Shipping charge</span>
+                        <span style={{ color: "#111827", fontWeight: "500" }}>
+                          {formatCurrency(quoteTotalsMeta.shippingCharges, quote.currency)}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
+                        <span>{quoteTotalsMeta.shippingTaxLabel}</span>
+                        <span style={{ color: "#111827", fontWeight: "500" }}>
+                          {formatCurrency(quoteTotalsMeta.shippingTaxAmount, quote.currency)}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
+                        <span>Adjustment</span>
+                        <span style={{ color: "#111827", fontWeight: "500" }}>
+                          {formatCurrency(quoteTotalsMeta.adjustment, quote.currency)}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
+                        <span>Round Off</span>
+                        <span style={{ color: "#111827", fontWeight: "500" }}>
+                          {formatCurrency(quoteTotalsMeta.roundOff, quote.currency)}
+                        </span>
+                      </div>
                       <div style={{
                         display: "flex",
                         justifyContent: "space-between",
@@ -4086,36 +4065,26 @@ const QuoteDetail = () => {
                           </div>
                         </>
                       )}
-                      {quoteTotalsMeta.taxAmount > 0 && (
-                        <div className="flex items-center justify-between w-64 py-2">
-                          <span className="text-sm text-gray-600">{quoteTotalsMeta.taxLabel}</span>
-                          <span className="text-sm font-medium text-gray-900">{formatCurrency(quoteTotalsMeta.taxAmount, quote.currency)}</span>
-                        </div>
-                      )}
-                      {quoteTotalsMeta.shippingCharges !== 0 && (
-                        <div className="flex items-center justify-between w-64 py-2">
-                          <span className="text-sm text-gray-600">Shipping charge</span>
-                          <span className="text-sm font-medium text-gray-900">{formatCurrency(quoteTotalsMeta.shippingCharges, quote.currency)}</span>
-                        </div>
-                      )}
-                      {quoteTotalsMeta.shippingTaxAmount > 0 && (
-                        <div className="flex items-center justify-between w-64 py-2">
-                          <span className="text-sm text-gray-600">{quoteTotalsMeta.shippingTaxLabel}</span>
-                          <span className="text-sm font-medium text-gray-900">{formatCurrency(quoteTotalsMeta.shippingTaxAmount, quote.currency)}</span>
-                        </div>
-                      )}
-                      {quoteTotalsMeta.adjustment !== 0 && (
-                        <div className="flex items-center justify-between w-64 py-2">
-                          <span className="text-sm text-gray-600">Adjustment</span>
-                          <span className="text-sm font-medium text-gray-900">{formatCurrency(quoteTotalsMeta.adjustment, quote.currency)}</span>
-                        </div>
-                      )}
-                      {quoteTotalsMeta.roundOff !== 0 && (
-                        <div className="flex items-center justify-between w-64 py-2">
-                          <span className="text-sm text-gray-600">Round Off</span>
-                          <span className="text-sm font-medium text-gray-900">{formatCurrency(quoteTotalsMeta.roundOff, quote.currency)}</span>
-                        </div>
-                      )}
+                      <div className="flex items-center justify-between w-64 py-2">
+                        <span className="text-sm text-gray-600">{quoteTotalsMeta.taxLabel}</span>
+                        <span className="text-sm font-medium text-gray-900">{formatCurrency(quoteTotalsMeta.taxAmount, quote.currency)}</span>
+                      </div>
+                      <div className="flex items-center justify-between w-64 py-2">
+                        <span className="text-sm text-gray-600">Shipping charge</span>
+                        <span className="text-sm font-medium text-gray-900">{formatCurrency(quoteTotalsMeta.shippingCharges, quote.currency)}</span>
+                      </div>
+                      <div className="flex items-center justify-between w-64 py-2">
+                        <span className="text-sm text-gray-600">{quoteTotalsMeta.shippingTaxLabel}</span>
+                        <span className="text-sm font-medium text-gray-900">{formatCurrency(quoteTotalsMeta.shippingTaxAmount, quote.currency)}</span>
+                      </div>
+                      <div className="flex items-center justify-between w-64 py-2">
+                        <span className="text-sm text-gray-600">Adjustment</span>
+                        <span className="text-sm font-medium text-gray-900">{formatCurrency(quoteTotalsMeta.adjustment, quote.currency)}</span>
+                      </div>
+                      <div className="flex items-center justify-between w-64 py-2">
+                        <span className="text-sm text-gray-600">Round Off</span>
+                        <span className="text-sm font-medium text-gray-900">{formatCurrency(quoteTotalsMeta.roundOff, quote.currency)}</span>
+                      </div>
                       <div className="flex items-center justify-between w-64 py-2 px-3 bg-gray-100 total-row">
                         <span className="text-sm text-gray-600">Total</span>
                         <span className="text-sm font-medium text-gray-900 text-lg font-bold">{formatCurrency(quoteTotalsMeta.total, quote.currency)}</span>

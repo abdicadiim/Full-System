@@ -35,6 +35,78 @@ const normalizeAddressSnapshot = (address: any) => {
   return [attention, street1, street2, cityStateZip, country].filter(Boolean).join(", ");
 };
 
+const toFiniteNumber = (value: unknown, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const normalizeQuoteFinancialFields = (source: any = {}) => {
+  const shippingCharges = toFiniteNumber(
+    source?.shippingCharges ??
+      source?.shipping ??
+      source?.shippingCharge ??
+      source?.shippingAmount ??
+      source?.shipmentCharges ??
+      source?.shipping_charges ??
+      source?.shipping_charge ??
+      source?.shipping_amount,
+  );
+  const shippingChargeTax = String(
+    source?.shippingChargeTax ??
+      source?.shippingTax ??
+      source?.shipping_tax ??
+      source?.shippingTaxId ??
+      source?.shipping_tax_id ??
+      source?.shippingTaxName ??
+      source?.shipping_tax_name ??
+      "",
+  ).trim();
+  const shippingTaxAmount = toFiniteNumber(
+    source?.shippingTaxAmount ??
+      source?.shippingTax ??
+      source?.shipping_tax_amount ??
+      source?.shipping_tax ??
+      0,
+  );
+  const shippingTaxName = String(
+    source?.shippingTaxName ??
+      source?.shipping_tax_name ??
+      "",
+  ).trim();
+  const shippingTaxRate = toFiniteNumber(
+    source?.shippingTaxRate ??
+      source?.shipping_tax_rate ??
+      0,
+  );
+  const adjustment = toFiniteNumber(
+    source?.adjustment ??
+      source?.adjustments ??
+      source?.roundingAdjustment ??
+      source?.adjustmentAmount ??
+      source?.adjustment_amount ??
+      source?.rounding_adjustment ??
+      0,
+  );
+  const roundOff = toFiniteNumber(
+    source?.roundOff ??
+      source?.rounding ??
+      source?.roundOffAmount ??
+      source?.round_off ??
+      source?.rounding_amount ??
+      0,
+  );
+
+  return {
+    shippingCharges,
+    shippingChargeTax,
+    shippingTaxAmount,
+    shippingTaxName,
+    shippingTaxRate,
+    adjustment,
+    roundOff,
+  };
+};
+
 const requireOrgId = (req: express.Request, res: express.Response) => {
   const orgId = req.user?.organizationId;
   if (!orgId) {
@@ -195,9 +267,11 @@ export const createQuote: express.RequestHandler = async (req, res) => {
     });
   }
 
+  const financialFields = normalizeQuoteFinancialFields(req.body);
   const payload: any = {
     organizationId: orgId,
     ...req.body,
+    ...financialFields,
     customerName,
     billingAddress,
     shippingAddress,
@@ -224,7 +298,10 @@ export const updateQuote: express.RequestHandler = async (req, res) => {
   const id = String(req.params.id || "").trim();
   if (!id) return res.status(400).json({ success: false, message: "Invalid id", data: null });
 
-  const patch: any = { ...req.body };
+  const patch: any = {
+    ...req.body,
+    ...normalizeQuoteFinancialFields(req.body),
+  };
   if (patch.quoteDate) patch.quoteDate = asDate(patch.quoteDate);
   if (patch.expiryDate) patch.expiryDate = asDate(patch.expiryDate);
   if (patch.billingAddress !== undefined) patch.billingAddress = normalizeAddressSnapshot(patch.billingAddress);

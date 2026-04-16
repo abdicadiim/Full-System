@@ -889,7 +889,7 @@ const defaultTxSeries = [
     id: "series-sr",
     _id: "series-sr",
     module: "sales-receipts",
-    prefix: "SR-",
+    prefix: "SR",
     nextNumber: 1,
     status: "Active",
   },
@@ -1924,19 +1924,15 @@ const creditNotesBase = resource("/credit-notes");
 export const creditNotesAPI = {
   ...creditNotesLocal,
   getAll: async (params?: Record<string, any>) => {
-    try {
-      const res = await creditNotesBase.getAll(params);
-      if (res?.success) return res as any;
-    } catch {}
-    return creditNotesLocal.getAll(params);
+    const res = await creditNotesBase.getAll(params);
+    if (res?.success) return res as any;
+    throw new Error(res?.message || "Failed to load credit notes");
   },
   list: (params?: Record<string, any>) => creditNotesAPI.getAll(params),
   getById: async (id: string) => {
-    try {
-      const res = await creditNotesBase.getById(id);
-      if (res?.success) return res as any;
-    } catch {}
-    return creditNotesLocal.getById(id);
+    const res = await creditNotesBase.getById(id);
+    if (res?.success) return res as any;
+    throw new Error(res?.message || "Failed to load credit note");
   },
   getByCustomer: async (customerId: string, params?: Record<string, any>) => {
     const all = await creditNotesAPI.getAll({
@@ -1978,6 +1974,10 @@ export const creditNotesAPI = {
   },
   getNextNumber: async () => {
     try {
+      const res = await request({ path: "/credit-notes/next-number" });
+      if (res?.success) return res as any;
+    } catch {}
+    try {
       const txRes: any = await transactionNumberSeriesAPI.getNextNumber({
         module: "Credit Note",
         reserve: false,
@@ -2002,10 +2002,6 @@ export const creditNotesAPI = {
     } catch {
       // fall back
     }
-    try {
-      const res = await request({ path: "/credit-notes/next-number" });
-      if (res?.success) return res as any;
-    } catch {}
     const all = await creditNotesLocal.getAll({ limit: 100000 });
     const next = (all.pagination?.total || 0) + 1;
     return {
@@ -2014,25 +2010,19 @@ export const creditNotesAPI = {
     };
   },
   create: async (data: any) => {
-    try {
-      const res = await creditNotesBase.create(data);
-      if (res?.success) return res as any;
-    } catch {}
-    return creditNotesLocal.create(data);
+    const res = await creditNotesBase.create(data);
+    if (res?.success) return res as any;
+    throw new Error(res?.message || "Failed to create credit note");
   },
   update: async (id: string, data: any) => {
-    try {
-      const res = await creditNotesBase.update(id, data);
-      if (res?.success) return res as any;
-    } catch {}
-    return creditNotesLocal.update(id, data);
+    const res = await creditNotesBase.update(id, data);
+    if (res?.success) return res as any;
+    throw new Error(res?.message || "Failed to update credit note");
   },
   delete: async (id: string) => {
-    try {
-      const res = await creditNotesBase.delete(id);
-      if (res?.success) return res as any;
-    } catch {}
-    return creditNotesLocal.delete(id);
+    const res = await creditNotesBase.delete(id);
+    if (res?.success) return res as any;
+    throw new Error(res?.message || "Failed to delete credit note");
   },
   sendEmail: async (id: string, data: any) => {
     const res: any = await request({
@@ -2617,7 +2607,7 @@ export const salesReceiptsAPI = {
         txRes?.data?.receiptNumber ||
         txRes?.nextNumber;
       if (nextNumber) {
-        const normalized = String(nextNumber).trim();
+        const normalized = String(nextNumber).trim().replace(/[^A-Za-z0-9]/g, "");
         return {
           success: true,
           data: {
@@ -2638,7 +2628,7 @@ export const salesReceiptsAPI = {
     } catch {}
     const all = await salesReceiptsLocal.getAll({ limit: 100000 });
     const next = (all.pagination?.total || 0) + 1;
-    const nextNumber = `SR-${String(next).padStart(5, "0")}`;
+    const nextNumber = `SR${String(next).padStart(5, "0")}`;
     return {
       success: true,
       data: {

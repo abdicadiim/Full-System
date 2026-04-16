@@ -90,12 +90,8 @@ export default function NewQuoteFormSection({ controller }: Props) {
     (selectedCustomer as any)?.phone ||
     (selectedCustomer as any)?.mobile ||
     "-";
-  const autoQuoteNumber =
-    quotePrefix && quoteNextNumber
-      ? buildQuoteNumber(quotePrefix, quoteNextNumber)
-      : String(formData.quoteNumber || "");
   const displayQuoteNumber =
-    quoteNumberMode === "manual" ? String(formData.quoteNumber || "") : autoQuoteNumber;
+    String(formData.quoteNumber || "").trim();
   const selectedCustomerType =
     (selectedCustomer as any)?.customerType ||
     (selectedCustomer as any)?.type ||

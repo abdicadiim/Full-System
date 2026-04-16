@@ -117,6 +117,71 @@ export function useNewQuoteState() {
   const { baseCurrencyCode } = useCurrency();
   const { quoteId } = useParams();
   const isEditMode = !!quoteId;
+  const readPersistedEditQuote = () => {
+    if (!isEditMode || !quoteId || typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(`quote_edit_${quoteId}`) || localStorage.getItem(`quote_detail_${quoteId}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
+  const initialQuoteSource =
+    (location.state as any)?.preloadedQuote ||
+    (location.state as any)?.clonedData ||
+    readPersistedEditQuote() ||
+    null;
+  const formatInitialQuoteDate = (value: any) => {
+    if (!value) return "";
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) return "";
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) return trimmed;
+      const parts = trimmed.split("/");
+      if (parts.length === 3 && parts[0].length === 2 && parts[1].length === 2 && parts[2].length === 4) {
+        return trimmed;
+      }
+      const parsed = new Date(trimmed);
+      if (!Number.isNaN(parsed.getTime())) {
+        const day = String(parsed.getDate()).padStart(2, "0");
+        const month = String(parsed.getMonth() + 1).padStart(2, "0");
+        const year = parsed.getFullYear();
+        return `${day}/${month}/${year}`;
+      }
+      return trimmed;
+    }
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      const day = String(parsed.getDate()).padStart(2, "0");
+      const month = String(parsed.getMonth() + 1).padStart(2, "0");
+      const year = parsed.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+    return String(value || "");
+  };
+  const initialQuoteNumber = (() => {
+    const source = initialQuoteSource as any;
+    const numberValue = source?.quoteNumber ||
+      source?.quoteNo ||
+      source?.quote_no ||
+      source?.number ||
+      source?.estimateNumber ||
+      source?.estimateNo ||
+      source?.estimate_no ||
+      source?.id ||
+      source?._id ||
+      "";
+    return String(numberValue || (isEditMode ? "" : "QT-000002")).trim();
+  })();
+  const initialQuoteDate = (() => {
+    const source = initialQuoteSource as any;
+    const value = formatInitialQuoteDate(source?.quoteDate || source?.date || source?.createdAt);
+    return value || (isEditMode ? "" : new Date().toLocaleDateString("en-GB"));
+  })();
+  const initialExpiryDate = (() => {
+    const source = initialQuoteSource as any;
+    return formatInitialQuoteDate(source?.expiryDate || source?.expiry || source?.validUntil);
+  })();
   const clonedDataFromState = location.state?.clonedData || null;
   const [saveLoading, setSaveLoading] = useState<null | "draft" | "send">(null);
   const [taxes, setTaxes] = useState<Tax[]>([]);
@@ -125,11 +190,11 @@ export function useNewQuoteState() {
     customerName: "",
     selectedLocation: "Head Office",
     selectedPriceList: "Select Price List",
-    quoteNumber: "QT-000002",
+    quoteNumber: initialQuoteNumber,
     status: "Draft",
     referenceNumber: "",
-    quoteDate: new Date().toLocaleDateString("en-GB"), // DD/MM/YYYY format which our salesModel now handles
-    expiryDate: "",
+    quoteDate: initialQuoteDate, // DD/MM/YYYY format which our salesModel now handles
+    expiryDate: initialExpiryDate,
     salesperson: "",
     salespersonId: "",
     projectName: "",
@@ -283,6 +348,31 @@ export function useNewQuoteState() {
     const clonedSubTotal = resolveSubtotalFromQuoteLike(cloned, mappedItems || []);
     const clonedTax = toNumberSafe(cloned.totalTax ?? cloned.taxAmount ?? cloned.tax);
     const normalizedClonedDiscount = normalizeDiscountForForm(cloned, clonedSubTotal, clonedTax);
+    const clonedTotal = toNumberSafe(cloned.total ?? cloned.amount);
+    const clonedShipping = Number(
+      cloned.shippingCharges ??
+      cloned.shipping ??
+      cloned.shippingCharge ??
+      cloned.shippingAmount ??
+      cloned.shipmentCharges ??
+      cloned.shipping_charges ??
+      0
+    ) || 0;
+    const clonedAdjustment = Number(
+      cloned.adjustment ??
+      cloned.adjustments ??
+      cloned.roundingAdjustment ??
+      cloned.adjustmentAmount ??
+      cloned.adjustment_amount ??
+      0
+    ) || 0;
+    const clonedRoundOff = Number(
+      cloned.roundOff ??
+      cloned.rounding ??
+      cloned.roundOffAmount ??
+      cloned.round_off ??
+      0
+    ) || 0;
     setFormData(prev => ({
       ...prev,
       customerName: cloned.customerName || cloned.customer?.displayName || cloned.customer?.name || prev.customerName,
@@ -303,11 +393,11 @@ export function useNewQuoteState() {
       discount: normalizedClonedDiscount.discountValue,
       discountType: normalizedClonedDiscount.discountTypeValue,
       discountAccount: cloned.discountAccount || prev.discountAccount,
-      shippingCharges: Number(cloned.shippingCharges ?? prev.shippingCharges) || 0,
-      shippingChargeTax: String(cloned.shippingChargeTax || cloned.shippingTax || prev.shippingChargeTax || ""),
-      adjustment: Number(cloned.adjustment ?? prev.adjustment) || 0,
-      roundOff: Number(cloned.roundOff ?? prev.roundOff) || 0,
-      total: Number(cloned.total ?? prev.total) || 0,
+      shippingCharges: clonedShipping || prev.shippingCharges || 0,
+      shippingChargeTax: String(cloned.shippingChargeTax || cloned.shippingTaxId || cloned.shippingTax || cloned.shippingTaxName || prev.shippingChargeTax || ""),
+      adjustment: clonedAdjustment || prev.adjustment || 0,
+      roundOff: clonedRoundOff || prev.roundOff || 0,
+      total: clonedTotal || prev.total || 0,
       currency: cloned.currency || prev.currency,
       customerNotes: cloned.customerNotes || cloned.notes || prev.customerNotes,
       termsAndConditions: cloned.termsAndConditions || cloned.terms || prev.termsAndConditions,

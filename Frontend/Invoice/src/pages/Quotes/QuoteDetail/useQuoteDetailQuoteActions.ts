@@ -26,15 +26,24 @@ export const useQuoteDetailQuoteActions = (ctx: any) => {
   } = ctx;
 
   const handleEdit = async () => {
-    let preload = quote;
-    try {
-      const fresh = await getQuoteByIdDep(String(quoteId || ""));
-      if (fresh) preload = fresh;
-    } catch {
-      // best effort only
+    const preload = quote
+      ? { ...(quote || {}) }
+      : await (async () => {
+        try {
+          return await getQuoteByIdDep(String(quoteId || ""));
+        } catch {
+          return null;
+        }
+      })();
+    if (preload && typeof window !== "undefined" && quoteId) {
+      try {
+        localStorage.setItem(`quote_edit_${quoteId}`, JSON.stringify(preload));
+      } catch {
+        // best effort only
+      }
     }
     navigate(`/sales/quotes/${quoteId}/edit`, {
-      state: { preloadedQuote: preload },
+      state: { preloadedQuote: preload, preloadedQuotes: allQuotes },
     });
   };
 

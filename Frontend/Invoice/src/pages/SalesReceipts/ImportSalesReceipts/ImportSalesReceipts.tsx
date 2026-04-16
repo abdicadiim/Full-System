@@ -378,7 +378,7 @@ export default function ImportSalesReceipts() {
         ];
 
         const sampleRow = [
-            "SR-000001",
+            "SR000001",
             "2026-02-10",
             "Abduladim Abduladim",
             "POS-REF-1001",
@@ -761,7 +761,7 @@ export default function ImportSalesReceipts() {
                 } catch (error) {
                     console.warn("Failed to fetch next sales receipt number for import:", error);
                 }
-                return `SR-IMP-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+                return `SRIMP${Date.now()}${Math.floor(Math.random() * 10000)}`;
             };
 
             let fallbackImportItem: any = null;

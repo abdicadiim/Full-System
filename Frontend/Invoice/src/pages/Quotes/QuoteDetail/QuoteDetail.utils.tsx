@@ -78,21 +78,46 @@ export const getQuoteTotalsMeta = (quoteData: any) => {
     quoteData?.shippingCharge ??
     0
   );
-  const shippingTaxAmount = toNumber(quoteData?.shippingTaxAmount ?? quoteData?.shippingTax ?? 0);
+  const taxExclusive = quoteData?.taxExclusive || "Tax Exclusive";
+  const isTaxInclusive = taxExclusive === "Tax Inclusive";
+
+  const shippingTaxAmountFromQuote = toNumber(quoteData?.shippingTaxAmount ?? quoteData?.shippingTax ?? 0);
+  const shippingTaxRate = toNumber(quoteData?.shippingTaxRate ?? 0);
+  const shippingTaxAmount = shippingTaxAmountFromQuote || (
+    shippingCharges > 0 && shippingTaxRate > 0
+      ? (isTaxInclusive
+        ? shippingCharges - (shippingCharges / (1 + shippingTaxRate / 100))
+        : (shippingCharges * shippingTaxRate) / 100)
+      : 0
+  );
   const taxAmountFromQuote = toNumber(quoteData?.totalTax ?? quoteData?.taxAmount ?? quoteData?.tax ?? 0);
-  const itemsTaxAmount = items.reduce((sum: number, item: any) => sum + toNumber(item?.taxAmount ?? 0), 0);
+  const itemsTaxAmount = items.reduce((sum: number, item: any) => {
+    const explicitItemTax = toNumber(item?.taxAmount ?? 0);
+    if (explicitItemTax > 0) return sum + explicitItemTax;
+
+    const taxRate = toNumber(item?.taxRate ?? 0);
+    if (taxRate <= 0) return sum;
+
+    const quantity = toNumber(item?.quantity ?? 0);
+    const rate = toNumber(item?.unitPrice ?? item?.rate ?? item?.price ?? 0);
+    const lineTotal = toNumber(item?.amount ?? item?.total ?? (quantity * rate));
+    if (lineTotal <= 0) return sum;
+
+    const derivedTax = isTaxInclusive
+      ? lineTotal - (lineTotal / (1 + taxRate / 100))
+      : (lineTotal * taxRate) / 100;
+    return sum + derivedTax;
+  }, 0);
   const taxAmount = taxAmountFromQuote || (itemsTaxAmount + shippingTaxAmount);
   const discount = toNumber(quoteData?.discount ?? quoteData?.discountAmount ?? 0);
   const adjustment = toNumber(quoteData?.adjustment ?? 0);
   const roundOff = toNumber(quoteData?.roundOff ?? 0);
-  const taxExclusive = quoteData?.taxExclusive || "Tax Exclusive";
-  const isTaxInclusive = taxExclusive === "Tax Inclusive";
 
   const discountBase = Math.max(0, isTaxInclusive ? (subTotal - taxAmount) : subTotal);
   const discountRate = discount > 0 && discountBase > 0 ? (discount / discountBase) * 100 : 0;
   const discountLabel = discount > 0 ? `Discount(${discountRate.toFixed(2)}%)` : "Discount";
 
-  const explicitTaxName = String(quoteData?.taxName || "").trim();
+  const explicitTaxName = String(quoteData?.taxName || quoteData?.taxLabel || (quoteData?.tax && typeof quoteData.tax === "object" ? (quoteData.tax.name || quoteData.tax.taxName || "") : "")).trim();
   let taxLabel = explicitTaxName;
   if (!taxLabel) {
     const rates = Array.from(new Set((quoteData?.items || [])
@@ -115,13 +140,13 @@ export const getQuoteTotalsMeta = (quoteData: any) => {
     shippingTaxSource && typeof shippingTaxSource === "object"
       ? String((shippingTaxSource as any).name || (shippingTaxSource as any).taxName || "")
       : String(quoteData?.shippingTaxName || "");
-  const shippingTaxRate =
+  const shippingTaxRateValue =
     shippingTaxSource && typeof shippingTaxSource === "object"
       ? parseFloat((shippingTaxSource as any).rate || 0) || 0
       : parseFloat(quoteData?.shippingTaxRate || 0) || 0;
   const shippingTaxLabel =
     shippingTaxName ||
-    (shippingTaxRate > 0 ? `Shipping Tax (${Number.isInteger(shippingTaxRate) ? shippingTaxRate.toFixed(0) : shippingTaxRate.toFixed(2)}%)` : "Shipping Tax");
+    (shippingTaxRateValue > 0 ? `Shipping Tax (${Number.isInteger(shippingTaxRateValue) ? shippingTaxRateValue.toFixed(0) : shippingTaxRateValue.toFixed(2)}%)` : "Shipping Tax");
 
   const computedTotal = isTaxInclusive
     ? (subTotal - discount + shippingCharges + adjustment + roundOff)
@@ -369,36 +394,26 @@ export const generateQuoteHTMLForQuote = (quoteData: any, organizationProfile: a
           (Applied on ${formatCurrency(totalsMeta.discountBase, quoteData.currency)})
         </div>
         ` : ""}
-        ${totalsMeta.taxAmount > 0 ? `
         <div class="total-row">
           <span class="total-label">${totalsMeta.taxLabel}</span>
           <span class="total-value">${formatCurrency(totalsMeta.taxAmount || 0, quoteData.currency)}</span>
         </div>
-        ` : ""}
-        ${totalsMeta.shippingCharges !== 0 ? `
         <div class="total-row">
           <span class="total-label">Shipping charge</span>
           <span class="total-value">${formatCurrency(totalsMeta.shippingCharges, quoteData.currency)}</span>
         </div>
-        ` : ""}
-        ${totalsMeta.shippingTaxAmount > 0 ? `
         <div class="total-row">
           <span class="total-label">${totalsMeta.shippingTaxLabel}</span>
           <span class="total-value">${formatCurrency(totalsMeta.shippingTaxAmount, quoteData.currency)}</span>
         </div>
-        ` : ""}
-        ${totalsMeta.adjustment !== 0 ? `
         <div class="total-row">
           <span class="total-label">Adjustment</span>
           <span class="total-value">${formatCurrency(totalsMeta.adjustment, quoteData.currency)}</span>
         </div>
-        ` : ""}
-        ${totalsMeta.roundOff !== 0 ? `
         <div class="total-row">
           <span class="total-label">Round Off</span>
           <span class="total-value">${formatCurrency(totalsMeta.roundOff, quoteData.currency)}</span>
         </div>
-        ` : ""}
         <div class="total-row final">
           <span>Total</span>
           <span>${formatCurrency(totalsMeta.total, quoteData.currency)}</span>

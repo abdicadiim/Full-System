@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import { getSalesReceiptById, getSalesReceipts, deleteSalesReceipt, updateSalesReceipt, saveSalesReceipt, SalesReceipt } from "../../salesModel";
+import { formatSalesReceiptNumber, getSalesReceiptById, getSalesReceipts, deleteSalesReceipt, updateSalesReceipt, saveSalesReceipt, SalesReceipt } from "../../salesModel";
 import { currenciesAPI, salesReceiptsAPI, senderEmailsAPI } from "../../../services/api";
 import { getCurrentUser } from "../../../services/auth";
 import { resolveVerifiedPrimarySender } from "../../../utils/emailSenderDisplay";
@@ -363,13 +363,13 @@ export default function SalesReceiptDetail() {
     if (receipt) {
       setEmailData({
         to: receipt.customerEmail || "",
-        subject: `Sales Receipt - ${receipt.receiptNumber || receipt.id}`,
+        subject: `Sales Receipt ${formatSalesReceiptNumber(receipt.receiptNumber || receipt.id)}`,
         message: `Dear ${receipt.customerName || (typeof receipt.customer === 'object' ? (receipt.customer?.displayName || receipt.customer?.name) : receipt.customer) || "Customer"},
 
 Thank you for your purchase. Please find the sales receipt attached.
 
 Receipt Details:
-- Receipt Number: ${receipt.receiptNumber || receipt.id}
+- Receipt Number: ${formatSalesReceiptNumber(receipt.receiptNumber || receipt.id)}
 - Receipt Date: ${formatDate(receipt.date || receipt.receiptDate)}
 - Total Amount: ${formatCurrency(receipt.total || receipt.amount || 0, receipt.currency)}
 - Payment Mode: ${receipt.paymentMode || "—"}
@@ -408,7 +408,7 @@ ${sellerInfo.name}`
           customerEmail: customerEmail,
           senderName,
           senderEmail,
-          receiptNumber: receipt?.receiptNumber || receipt?.id,
+          receiptNumber: formatSalesReceiptNumber(receipt?.receiptNumber || receipt?.id),
           receiptDate: formatDate(receipt?.date || receipt?.receiptDate),
           total: formatCurrency(receipt?.total || receipt?.amount || 0, receipt?.currency),
           customerName: receipt?.customerName || (typeof receipt?.customer === 'object' ? (receipt?.customer?.displayName || receipt?.customer?.name) : receipt?.customer) || "Customer",
@@ -478,7 +478,7 @@ ${sellerInfo.name}`
         heightLeft -= printableHeight;
       }
 
-      pdf.save(`SalesReceipt-${receipt.receiptNumber || receipt.id}.pdf`);
+      pdf.save(`SalesReceipt${formatSalesReceiptNumber(receipt.receiptNumber || receipt.id)}.pdf`);
     } catch (error) {
       console.error("Error downloading sales receipt PDF:", error);
       toast.error("Failed to generate PDF. Please try again.");
@@ -850,7 +850,7 @@ ${sellerInfo.name}`
                   </div>
                 </div>
                 <div className="mt-1 text-[11px] text-gray-500">
-                  {r.receiptNumber || r.id} - {formatDate(r.date || r.receiptDate)}
+                  {formatSalesReceiptNumber(r.receiptNumber || r.id)} - {formatDate(r.date || r.receiptDate)}
                 </div>
                 <div
                   className={`mt-1 text-[10px] font-bold uppercase ${normalizeSalesReceiptStatus(r.status) === "void"
@@ -872,7 +872,7 @@ ${sellerInfo.name}`
           <div>
             <div className="text-sm text-gray-600">Location: {sellerInfo.location || "Head Office"}</div>
             <div className="flex items-center gap-2">
-              <div className="text-[24px] leading-tight font-semibold text-gray-900">{receipt.receiptNumber || receipt.id}</div>
+              <div className="text-[24px] leading-tight font-semibold text-gray-900">{formatSalesReceiptNumber(receipt.receiptNumber || receipt.id)}</div>
               {String(receipt.status || "").trim() ? (
                 <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-gray-200 text-gray-500 bg-gray-50">
                   {getSalesReceiptStatusLabel(receipt.status)}
@@ -1133,7 +1133,7 @@ ${sellerInfo.name}`
               <div className="mb-10">
                 <h1 className="text-3xl font-bold text-gray-900 tracking-tight">SALES RECEIPT</h1>
                 <div className="text-sm text-gray-600 mt-1">
-                  Sales Receipt# {receipt.receiptNumber || receipt.id}
+                  Sales Receipt {formatSalesReceiptNumber(receipt.receiptNumber || receipt.id)}
                 </div>
               </div>
 
@@ -1330,7 +1330,7 @@ ${sellerInfo.name}`
               </button>
             </div>
             <div className="px-5 py-3 text-[13px] text-slate-600">
-              Receipt {receipt?.receiptNumber || receipt?.id || ""} will be deleted permanently.
+              Receipt {formatSalesReceiptNumber(receipt?.receiptNumber || receipt?.id || "")} will be deleted permanently.
             </div>
             <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
               <button

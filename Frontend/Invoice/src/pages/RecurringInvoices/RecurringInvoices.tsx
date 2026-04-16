@@ -28,7 +28,6 @@ import {
 import { getRecurringInvoices, updateRecurringInvoice, deleteRecurringInvoice, getCustomViews, deleteCustomView, generateInvoiceFromRecurring, RecurringInvoice, getCustomers, getSalespersonsFromAPI } from "../salesModel";
 import { exportToCSV, exportToExcel, exportToPDF } from "./exportUtils";
 import FieldCustomization from "../shared/FieldCustomization";
-import PaginationFooter from "../../components/ui/PaginationFooter";
 import { Eye, Check } from "lucide-react";
 
 const statusFilterOptions = [
@@ -52,8 +51,6 @@ export default function RecurringInvoices() {
   const bulkLookupLoadPromiseRef = useRef<Promise<void> | null>(null);
   const bulkLookupLoadedRef = useRef(false);
   const [filteredRecurringInvoices, setFilteredRecurringInvoices] = useState<RecurringInvoice[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(25);
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -862,7 +859,6 @@ export default function RecurringInvoices() {
 
   const handleStatusFilter = (status: React.SetStateAction<string>) => {
     setSelectedStatus(status);
-    setCurrentPage(1);
     setIsViewDropdownOpen(false);
     if (status === "All") {
       setSelectedView("All Recurring Invoices");
@@ -901,13 +897,6 @@ export default function RecurringInvoices() {
     return selectedStatus === view;
   };
 
-  const totalRecurringPages = Math.max(1, Math.ceil(filteredRecurringInvoices.length / itemsPerPage));
-  const safeCurrentPage = Math.min(Math.max(currentPage, 1), totalRecurringPages);
-  const paginatedRecurringInvoices = useMemo(() => {
-    const start = (safeCurrentPage - 1) * itemsPerPage;
-    return filteredRecurringInvoices.slice(start, start + itemsPerPage);
-  }, [filteredRecurringInvoices, safeCurrentPage, itemsPerPage]);
-
   const handleCreateNewRecurringInvoice = () => {
     navigate("/sales/recurring-invoices/new");
   };
@@ -920,7 +909,6 @@ export default function RecurringInvoices() {
       setSelectedSortBy(sortOption);
       setSortOrder("desc"); // Default to descending
     }
-    setCurrentPage(1);
     setIsSortDropdownOpen(false);
     // Keep the main menu open so user can perform other actions
   };
@@ -984,10 +972,10 @@ export default function RecurringInvoices() {
   // Selection handlers
   const handleSelectAll = (e: { target: { checked: any; }; }) => {
     if (e.target.checked) {
-      setSelectedInvoices((prev) => Array.from(new Set([...prev, ...paginatedRecurringInvoices.map(inv => String(inv.id))])));
+      setSelectedInvoices((prev) => Array.from(new Set([...prev, ...filteredRecurringInvoices.map(inv => String(inv.id))])));
     } else {
-      const pageIds = new Set(paginatedRecurringInvoices.map(inv => String(inv.id)));
-      setSelectedInvoices(prev => prev.filter(id => !pageIds.has(id)));
+      const listIds = new Set(filteredRecurringInvoices.map(inv => String(inv.id)));
+      setSelectedInvoices(prev => prev.filter(id => !listIds.has(id)));
     }
   };
 
@@ -1565,8 +1553,8 @@ export default function RecurringInvoices() {
                           type="checkbox"
                           className="w-4 h-4 cursor-pointer"
                           checked={
-                            paginatedRecurringInvoices.length > 0 &&
-                            paginatedRecurringInvoices.every((invoice) => selectedInvoices.includes(String(invoice.id)))
+                            filteredRecurringInvoices.length > 0 &&
+                            filteredRecurringInvoices.every((invoice) => selectedInvoices.includes(String(invoice.id)))
                           }
                           onChange={handleSelectAll}
                         />
@@ -1616,7 +1604,7 @@ export default function RecurringInvoices() {
                     </tr>
                   ))
                 ) : (
-                  paginatedRecurringInvoices.map((recurringInvoice) => (
+                  filteredRecurringInvoices.map((recurringInvoice) => (
                     <tr
                       key={recurringInvoice.id}
                       className="border-b border-[#eef1f6] hover:bg-[#f8fafc] cursor-pointer transition-colors h-[50px]"
@@ -1650,19 +1638,6 @@ export default function RecurringInvoices() {
           </div>
         )}
       </div>
-
-      <PaginationFooter
-        currentPage={safeCurrentPage}
-        totalItems={filteredRecurringInvoices.length}
-        totalPages={totalRecurringPages}
-        pageSize={itemsPerPage}
-        itemLabel="recurring invoices"
-        onPageChange={setCurrentPage}
-        onPageSizeChange={(pageSize) => {
-          setItemsPerPage(pageSize);
-          setCurrentPage(1);
-        }}
-      />
 
       {/* Bulk Update Modal */}
       {

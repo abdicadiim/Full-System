@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { AlertTriangle, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Clock, Edit, ExternalLink, FileText, FolderPlus, Loader2, Mail, Menu, MessageSquare, MoreHorizontal, MoreVertical, Paperclip, Settings, Share2, Trash2, Upload, X, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Clock, Download, Edit, ExternalLink, FileText, FolderPlus, Loader2, Mail, Menu, MessageSquare, MoreHorizontal, MoreVertical, Paperclip, Settings, Share2, Trash2, Upload, X, XCircle } from "lucide-react";
 import QuoteDetailLinkedInvoicesTable from "./QuoteDetailLinkedInvoicesTable";
 import QuoteDetailPdfDocument from "./QuoteDetailPdfDocument";
 import { formatCurrency, formatDate, getInitial, getStatusBadge } from "./QuoteDetail.utils";
@@ -362,7 +362,15 @@ const QuoteDetailMainContent = (props: Props) => {
         </div>
 
         <button className="flex items-center gap-1.5 px-2 py-1.5 text-gray-700" onClick={handleShare}><Share2 size={16} /><span>Share</span></button>
-        <button className="flex items-center gap-1.5 px-2 py-1.5 text-gray-700" onClick={handleDownloadPDF}><FileText size={16} /><span>{quoteStatus === "draft" ? "PDF/Print" : "Download PDF"}</span><ChevronDown size={14} /></button>
+        <button
+          type="button"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+          onClick={handleDownloadPDF}
+          aria-label="Download PDF"
+          title="Download PDF"
+        >
+          <Download size={16} />
+        </button>
 
         {(isDraftStatus || isSentStatus || isAcceptedStatus) && <button className="flex items-center gap-1.5 px-2 py-1.5 text-gray-700" onClick={handleConvertToInvoice}><FileText size={16} /><span>Convert to Invoice</span></button>}
         {isInvoicedStatus && <button className="flex items-center gap-1.5 px-2 py-1.5 text-gray-700" onClick={handleConvertToInvoice}><FileText size={16} /><span>Convert to Invoice</span></button>}
@@ -571,11 +579,31 @@ const QuoteDetailMainContent = (props: Props) => {
                     </tbody>
                   </table>
                 </div>
-                <div className="flex flex-col items-end gap-2 mt-4">
-                  <div className="flex justify-between w-64 text-sm"><span>Sub Total</span><span>{formatCurrency(quoteTotalsMeta.subTotal, quote.currency)}</span></div>
-                  <div className="text-xs text-gray-500 w-64">({quoteTotalsMeta.taxExclusive})</div>
-                  <div className="flex justify-between w-64 text-sm font-semibold bg-gray-100 px-3 py-2 rounded"><span>Total</span><span>{formatCurrency(quoteTotalsMeta.total, quote.currency)}</span></div>
+              <div className="flex flex-col items-end gap-2 mt-4">
+                <div className="flex justify-between w-64 text-sm"><span>Sub Total</span><span>{formatCurrency(quoteTotalsMeta.subTotal, quote.currency)}</span></div>
+                <div className="flex justify-between w-64 text-sm">
+                  <span>{quoteTotalsMeta.taxLabel}</span>
+                  <span>{formatCurrency(quoteTotalsMeta.taxAmount, quote.currency)}</span>
                 </div>
+                <div className="flex justify-between w-64 text-sm">
+                  <span>Shipping charge</span>
+                  <span>{formatCurrency(quoteTotalsMeta.shippingCharges, quote.currency)}</span>
+                </div>
+                <div className="flex justify-between w-64 text-sm">
+                  <span>{quoteTotalsMeta.shippingTaxLabel}</span>
+                  <span>{formatCurrency(quoteTotalsMeta.shippingTaxAmount, quote.currency)}</span>
+                </div>
+                <div className="flex justify-between w-64 text-sm">
+                  <span>Adjustment</span>
+                  <span>{formatCurrency(quoteTotalsMeta.adjustment, quote.currency)}</span>
+                </div>
+                <div className="flex justify-between w-64 text-sm">
+                  <span>Round Off</span>
+                  <span>{formatCurrency(quoteTotalsMeta.roundOff, quote.currency)}</span>
+                </div>
+                <div className="text-xs text-gray-500 w-64">({quoteTotalsMeta.taxExclusive})</div>
+                <div className="flex justify-between w-64 text-sm font-semibold bg-gray-100 px-3 py-2 rounded"><span>Total</span><span>{formatCurrency(quoteTotalsMeta.total, quote.currency)}</span></div>
+              </div>
               </div>
 
               <div className="mb-6">

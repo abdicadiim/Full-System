@@ -307,6 +307,9 @@ export function useNewQuoteSaveHelpers(controller: any) {
       ? getTaxBySelection(formData.shippingChargeTax)
       : null;
     const shippingTaxRate = shippingTaxObj ? parseTaxRate((shippingTaxObj as any).rate) : 0;
+    const shippingTaxName = shippingTaxObj
+      ? String((shippingTaxObj as any).name || (shippingTaxObj as any).taxName || "")
+      : String(formData.shippingChargeTax || "");
     const shippingTaxAmount = (showShippingCharges && shipping > 0 && shippingTaxRate > 0)
       ? calculateLineTaxAmount(shipping, shippingTaxRate, isInclusive)
       : 0;
@@ -325,6 +328,9 @@ export function useNewQuoteSaveHelpers(controller: any) {
       totalTax,
       discountAmount,
       shipping,
+      shippingTaxAmount,
+      shippingTaxRate,
+      shippingTaxName,
       adjustment,
       roundOff,
       finalTotal

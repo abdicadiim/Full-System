@@ -102,7 +102,7 @@ export default function PaginationFooter({
         </button>
 
         <div className="inline-flex min-w-[110px] items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm">
-          {startItem} - {endItem}
+          {startItem} to {endItem}
         </div>
 
         <button

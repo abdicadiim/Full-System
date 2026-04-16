@@ -3,8 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router-dom";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import LoadingSpinner from "../../components/LoadingSpinner";
-import PaginationFooter from "../../components/ui/PaginationFooter";
-import { getSalesReceipts, getSalesReceiptsPaginated, deleteSalesReceipt, updateSalesReceipt, getSalesReceiptById, getCustomers, getSalespersons, getTaxes, getProjects, getItemsFromAPI, getCustomViews, deleteCustomView } from "../salesModel";
+import { formatSalesReceiptNumber, getSalesReceipts, deleteSalesReceipt, updateSalesReceipt, getSalesReceiptById, getCustomers, getSalespersons, getTaxes, getProjects, getItemsFromAPI, getCustomViews, deleteCustomView } from "../salesModel";
 // import { sampleItems } from "../items/itemsModel";
 import { toast } from "react-toastify";
 import html2canvas from "html2canvas";
@@ -91,7 +90,7 @@ export default function SalesReceipts() {
   const DEFAULT_COLUMNS: Column[] = [
     { key: "receipt_date", label: "Receipt Date", visible: true, pinned: true, width: 140, locked: true },
     { key: "location", label: "Location", visible: true, pinned: false, width: 140 },
-    { key: "receipt_number", label: "Sales Receipt#", visible: true, pinned: false, width: 160 },
+    { key: "receipt_number", label: "Sales Receipt", visible: true, pinned: false, width: 160 },
     { key: "reference", label: "Reference", visible: true, pinned: false, width: 150 },
     { key: "customer_name", label: "Customer Name", visible: true, pinned: false, width: 220 },
     { key: "payment_mode", label: "Payment Mode", visible: true, pinned: false, width: 140 },
@@ -206,7 +205,7 @@ export default function SalesReceipts() {
       case "receipt_date":
         return formatDate(receipt.date || receipt.receiptDate);
       case "receipt_number":
-        return receipt.receiptNumber || receipt.id || "—";
+        return formatSalesReceiptNumber(receipt.receiptNumber || receipt.id || "") || "—";
       case "location":
         return receipt.location || receipt.branch || "Head Office";
       case "reference":
@@ -315,24 +314,23 @@ export default function SalesReceipts() {
     }
   };
   const salesReceiptsQuery = useQuery({
-    queryKey: ["sales-receipts", currentPage, itemsPerPage, selectedStatus, activeSort],
+    queryKey: ["sales-receipts", selectedStatus, activeSort],
     placeholderData: keepPreviousData,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
       const isDesc = activeSort.includes("Descending") || activeSort.includes("Newest") || activeSort.includes("High to Low");
-      const response = await getSalesReceiptsPaginated({
-        page: currentPage,
-        limit: itemsPerPage,
+      const response = await getSalesReceipts({
+        limit: 100000,
         status: selectedStatus === "All" ? undefined : selectedStatus,
         sortBy: mapSortOptionToField(activeSort),
         sortOrder: isDesc ? "desc" : "asc"
       });
 
       return {
-        data: response.data || [],
-        pagination: response.pagination || { total: 0, page: currentPage, limit: itemsPerPage, pages: 0 }
+        data: response || [],
+        pagination: { total: Array.isArray(response) ? response.length : 0, page: 1, limit: Array.isArray(response) ? response.length : 0, pages: 1 }
       };
     }
   });
@@ -360,7 +358,7 @@ export default function SalesReceipts() {
 
   const sortMenuOptions = [
     { label: "Receipt Date", value: "Date (Newest First)" },
-    { label: "Sales Receipt#", value: "Receipt # (Ascending)" },
+    { label: "Sales Receipt", value: "Receipt # (Ascending)" },
     { label: "Customer Name", value: "Customer Name (A-Z)" },
     { label: "Amount", value: "Amount (High to Low)" },
     { label: "Created Time", value: "Date (Newest First)" }
@@ -701,7 +699,7 @@ export default function SalesReceipts() {
   const getSalesReceiptFilterValue = (receipt, fieldName) => {
     const fieldMap = {
       "Date": receipt.receiptDate || receipt.date || "",
-      "Receipt Number": receipt.receiptNumber || receipt.id || "",
+      "Receipt Number": formatSalesReceiptNumber(receipt.receiptNumber || receipt.id || ""),
       "Reference Number": receipt.referenceNumber || "",
       "Customer Name": receipt.customerName || receipt.customer || "",
       "Status": receipt.status || "completed",
@@ -1213,7 +1211,7 @@ export default function SalesReceipts() {
       <div style="width:794px; min-height:1123px; background:#ffffff; padding:40px; box-sizing:border-box; font-family:Arial, sans-serif; color:#111827;">
         <div style="margin-bottom:28px;">
           <div style="font-size:28px; font-weight:700; letter-spacing:0.02em;">SALES RECEIPT</div>
-          <div style="margin-top:8px; color:#4b5563; font-size:14px;">Sales Receipt# ${receipt?.receiptNumber || receipt?.id || ""}</div>
+          <div style="margin-top:8px; color:#4b5563; font-size:14px;">Sales Receipt ${formatSalesReceiptNumber(receipt?.receiptNumber || receipt?.id || "")}</div>
         </div>
 
         <div style="display:flex; justify-content:space-between; margin-bottom:24px;">
@@ -1836,16 +1834,6 @@ export default function SalesReceipts() {
         </div>
       )}
 
-      <PaginationFooter
-        currentPage={currentPage}
-        totalItems={pagination.total}
-        totalPages={pagination.pages}
-        pageSize={itemsPerPage}
-        itemLabel="sales receipts"
-        onPageChange={handlePageChange}
-        onPageSizeChange={handlePageSizeChange}
-      />
-
       {/* Bulk Update Modal */}
       {isBulkUpdateModalOpen && bulkUpdateModalRoot && createPortal(
         <div
@@ -2022,7 +2010,7 @@ export default function SalesReceipts() {
                       </div>
                     </th>}
                     {isColumnVisible("location") && <th className="px-4 py-3">LOCATION</th>}
-                    {isColumnVisible("receipt_number") && <th className="px-4 py-3">SALES RECEIPT#</th>}
+                    {isColumnVisible("receipt_number") && <th className="px-4 py-3">SALES RECEIPT</th>}
                     {isColumnVisible("reference") && <th className="px-4 py-3">REFERENCE</th>}
                     {isColumnVisible("customer_name") && <th className="px-4 py-3">CUSTOMER NAME</th>}
                     {isColumnVisible("payment_mode") && <th className="px-4 py-3">PAYMENT MODE</th>}
@@ -2106,7 +2094,7 @@ export default function SalesReceipts() {
                                   navigate(`/sales/sales-receipts/${receipt.id}`);
                                 }}
                               >
-                                {receipt.receiptNumber || receipt.id || "-"}
+                          {formatSalesReceiptNumber(receipt.receiptNumber || receipt.id || "") || "—"}
                               </span>
                               {isSalesReceiptEmailSent(receipt) && (
                                 <div title="Sent by Email" className="p-0.5 rounded text-slate-500">
@@ -2258,9 +2246,9 @@ export default function SalesReceipts() {
               <div className="grid grid-cols-2 gap-x-12 gap-y-6">
                 {/* Left Column */}
                 <div className="space-y-6">
-                  {/* Sales Receipt# */}
+                  {/* Sales Receipt */}
                   <div className="flex items-center gap-4">
-                    <label className="w-32 text-sm font-medium text-gray-600 text-right">Sales Receipt#</label>
+                    <label className="w-32 text-sm font-medium text-gray-600 text-right">Sales Receipt</label>
                     <input
                       type="text"
                       value={advancedSearchData.receiptNumber}
@@ -2389,9 +2377,9 @@ export default function SalesReceipts() {
 
                 {/* Right Column */}
                 <div className="space-y-6">
-                  {/* Reference# */}
+                  {/* Reference */}
                   <div className="flex items-center gap-4">
-                    <label className="w-32 text-sm font-medium text-gray-600 text-right">Reference#</label>
+                    <label className="w-32 text-sm font-medium text-gray-600 text-right">Reference</label>
                     <input
                       type="text"
                       value={advancedSearchData.referenceNumber}

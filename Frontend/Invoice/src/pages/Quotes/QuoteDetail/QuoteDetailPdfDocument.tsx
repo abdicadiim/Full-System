@@ -224,38 +224,36 @@ const QuoteDetailPdfDocument = ({
                 </div>
               </>
             )}
-            {quoteTotalsMeta.taxAmount > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
-                <span>{quoteTotalsMeta.taxLabel}</span>
-                <span style={{ color: "#111827", fontWeight: "500" }}>
-                  {formatCurrency(quoteTotalsMeta.taxAmount, quote.currency)}
-                </span>
-              </div>
-            )}
-            {quoteTotalsMeta.shippingCharges !== 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
-                <span>Shipping charge</span>
-                <span style={{ color: "#111827", fontWeight: "500" }}>
-                  {formatCurrency(quoteTotalsMeta.shippingCharges, quote.currency)}
-                </span>
-              </div>
-            )}
-            {quoteTotalsMeta.adjustment !== 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
-                <span>Adjustment</span>
-                <span style={{ color: "#111827", fontWeight: "500" }}>
-                  {formatCurrency(quoteTotalsMeta.adjustment, quote.currency)}
-                </span>
-              </div>
-            )}
-            {quoteTotalsMeta.roundOff !== 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
-                <span>Round Off</span>
-                <span style={{ color: "#111827", fontWeight: "500" }}>
-                  {formatCurrency(quoteTotalsMeta.roundOff, quote.currency)}
-                </span>
-              </div>
-            )}
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
+              <span>{quoteTotalsMeta.taxLabel}</span>
+              <span style={{ color: "#111827", fontWeight: "500" }}>
+                {formatCurrency(quoteTotalsMeta.taxAmount, quote.currency)}
+              </span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
+              <span>Shipping charge</span>
+              <span style={{ color: "#111827", fontWeight: "500" }}>
+                {formatCurrency(quoteTotalsMeta.shippingCharges, quote.currency)}
+              </span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
+              <span>{quoteTotalsMeta.shippingTaxLabel}</span>
+              <span style={{ color: "#111827", fontWeight: "500" }}>
+                {formatCurrency(quoteTotalsMeta.shippingTaxAmount, quote.currency)}
+              </span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
+              <span>Adjustment</span>
+              <span style={{ color: "#111827", fontWeight: "500" }}>
+                {formatCurrency(quoteTotalsMeta.adjustment, quote.currency)}
+              </span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
+              <span>Round Off</span>
+              <span style={{ color: "#111827", fontWeight: "500" }}>
+                {formatCurrency(quoteTotalsMeta.roundOff, quote.currency)}
+              </span>
+            </div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 12px", fontSize: "17px", fontWeight: "700", marginTop: "8px", borderRadius: "6px", backgroundColor: "#f3f4f6", color: "#111827" }}>
               <span>Total</span>
               <span>{formatCurrency(quote.total || 0, quote.currency)}</span>

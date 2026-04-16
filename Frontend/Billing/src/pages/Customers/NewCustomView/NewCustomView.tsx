@@ -38,7 +38,7 @@ const quoteFields = [
 ];
 
 const salesReceiptFields = [
-  "Date", "Sales Receipt#", "Reference Number", "Customer Name",
+  "Date", "Sales Receipt", "Reference Number", "Customer Name",
   "Status", "Payment Method", "Amount", "Deposit To"
 ];
 
@@ -93,8 +93,8 @@ export default function NewCustomView() {
         type: "sales-receipts",
         basePath: "/sales/sales-receipts",
         fields: salesReceiptFields,
-        defaultAvailableColumns: ["Date", "Sales Receipt#", "Reference Number", "Customer Name", "Status", "Payment Method", "Amount", "Deposit To"],
-        defaultSelectedColumn: "Sales Receipt#"
+        defaultAvailableColumns: ["Date", "Sales Receipt", "Reference Number", "Customer Name", "Status", "Payment Method", "Amount", "Deposit To"],
+        defaultSelectedColumn: "Sales Receipt"
       };
     }
     // Default to customers

@@ -52,7 +52,8 @@ export default function Layout({ children }) {
       "/credit-notes/import-refunds",
       "/credit-notes/custom-view/new"
     ].includes(location.pathname);
-  const disablePageScroll = isCreditNotesDetailPage;
+  const isSalesReceiptsPage = location.pathname.startsWith("/sales/sales-receipts");
+  const disablePageScroll = isCreditNotesDetailPage || isSalesReceiptsPage;
 
   useEffect(() => {
     const warmSeriesCache = window.setTimeout(() => {

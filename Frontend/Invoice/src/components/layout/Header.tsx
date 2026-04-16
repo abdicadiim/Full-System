@@ -228,7 +228,7 @@ function Header({ onToggleSidebar }) {
                   "ml-2 min-w-0 flex-1 bg-transparent text-sm focus:outline-none",
                   isLightAppearance ? "text-slate-700 placeholder:text-slate-400" : "text-white placeholder:text-white/70",
                 ].join(" ")}
-                placeholder={`Search in ${searchScope || currentSection} ( / )`}
+                placeholder={`Search in ${searchScope || currentSection}`}
               />
             </div>
 

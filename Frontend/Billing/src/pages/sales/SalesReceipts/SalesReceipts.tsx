@@ -100,7 +100,7 @@ const SALES_RECEIPTS_COLUMNS_STORAGE_KEY = "billing_sales_receipts_visible_colum
 const SALES_RECEIPTS_LIST_COLUMNS: SalesReceiptsColumnOption[] = [
   { key: "receipt_date", label: "Receipt Date", locked: true },
   { key: "location", label: "Location" },
-  { key: "receipt_number", label: "Sales Receipt#" },
+  { key: "receipt_number", label: "Sales Receipt" },
   { key: "reference", label: "Reference" },
   { key: "customer_name", label: "Customer Name" },
   { key: "payment_mode", label: "Payment Mode" },
@@ -241,7 +241,7 @@ export default function SalesReceipts() {
 
   const sortMenuOptions = [
     { label: "Receipt Date", value: "Date (Newest First)" },
-    { label: "Sales Receipt#", value: "Receipt # (Ascending)" },
+    { label: "Sales Receipt", value: "Receipt # (Ascending)" },
     { label: "Customer Name", value: "Customer Name (A-Z)" },
     { label: "Amount", value: "Amount (High to Low)" },
     { label: "Created Time", value: "Date (Newest First)" }
@@ -1098,7 +1098,7 @@ export default function SalesReceipts() {
       <div style="width:794px; min-height:1123px; background:#ffffff; padding:40px; box-sizing:border-box; font-family:Arial, sans-serif; color:#111827;">
         <div style="margin-bottom:28px;">
           <div style="font-size:28px; font-weight:700; letter-spacing:0.02em;">SALES RECEIPT</div>
-          <div style="margin-top:8px; color:#4b5563; font-size:14px;">Sales Receipt# ${receipt?.receiptNumber || receipt?.id || ""}</div>
+          <div style="margin-top:8px; color:#4b5563; font-size:14px;">Sales Receipt ${receipt?.receiptNumber || receipt?.id || ""}</div>
         </div>
 
         <div style="display:flex; justify-content:space-between; margin-bottom:24px;">
@@ -2108,9 +2108,9 @@ export default function SalesReceipts() {
               <div className="grid grid-cols-2 gap-x-12 gap-y-6">
                 {/* Left Column */}
                 <div className="space-y-6">
-                  {/* Sales Receipt# */}
+                  {/* Sales Receipt */}
                   <div className="flex items-center gap-4">
-                    <label className="w-32 text-sm font-medium text-gray-600 text-right">Sales Receipt#</label>
+                    <label className="w-32 text-sm font-medium text-gray-600 text-right">Sales Receipt</label>
                     <input
                       type="text"
                       value={advancedSearchData.receiptNumber}
@@ -2239,9 +2239,9 @@ export default function SalesReceipts() {
 
                 {/* Right Column */}
                 <div className="space-y-6">
-                  {/* Reference# */}
+                  {/* Reference */}
                   <div className="flex items-center gap-4">
-                    <label className="w-32 text-sm font-medium text-gray-600 text-right">Reference#</label>
+                    <label className="w-32 text-sm font-medium text-gray-600 text-right">Reference</label>
                     <input
                       type="text"
                       value={advancedSearchData.referenceNumber}
