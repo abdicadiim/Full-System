@@ -1,5 +1,6 @@
 import express from "express";
 import mongoose from "mongoose";
+import { Customer } from "../models/Customer.js";
 import { CreditNote } from "../models/CreditNote.js";
 import { SenderEmail } from "../models/SenderEmail.js";
 import { Organization } from "../models/Organization.js";
@@ -131,12 +132,19 @@ export const createCreditNote: express.RequestHandler = async (req, res) => {
   if (!orgId) return;
 
   try {
+    const customerId = String(req.body?.customerId || req.body?.customer || "").trim();
+    let customerName = String(req.body?.customerName || "").trim();
+    if (!customerName && customerId && mongoose.isValidObjectId(customerId)) {
+      const customer = await Customer.findById(customerId).lean();
+      customerName = String(customer?.displayName || customer?.companyName || customer?.name || "").trim();
+    }
+
     const payload = {
       ...req.body,
       organizationId: orgId,
       creditNoteNumber: String(req.body?.creditNoteNumber || "").trim(),
-      customerId: String(req.body?.customerId || req.body?.customer || "").trim(),
-      customerName: String(req.body?.customerName || "").trim(),
+      customerId,
+      customerName,
       invoiceId: String(req.body?.invoiceId || req.body?.invoice || "").trim(),
       invoiceNumber: String(req.body?.invoiceNumber || "").trim(),
       date: asDate(req.body?.creditNoteDate || req.body?.date) || new Date(),
@@ -162,6 +170,14 @@ export const updateCreditNote: express.RequestHandler = async (req, res) => {
 
   const id = String(req.params.id || "").trim();
   const update: any = { ...req.body };
+  const customerId = String(req.body?.customerId || req.body?.customer || "").trim();
+  if (customerId) {
+    update.customerId = customerId;
+    if (!String(update.customerName || "").trim() && mongoose.isValidObjectId(customerId)) {
+      const customer = await Customer.findById(customerId).lean();
+      update.customerName = String(customer?.displayName || customer?.companyName || customer?.name || "").trim();
+    }
+  }
   if (req.body?.creditNoteDate || req.body?.date) {
     update.date = asDate(req.body?.creditNoteDate || req.body?.date) || update.date;
   }

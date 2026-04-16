@@ -1197,7 +1197,7 @@ export default function PlanDetailPage() {
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-4 rounded border border-gray-200 px-2 py-1 text-[12px] text-gray-500">
                         <span className="cursor-pointer hover:text-gray-900 border-r border-gray-200 pr-2">{"<"}</span>
-                        <span className="text-gray-900 font-medium">{planAddons.length === 0 ? "0 - 0" : `1 - ${planAddons.length}`}</span>
+                        <span className="text-gray-900 font-medium">{planAddons.length === 0 ? "0 to 0" : `1 to ${planAddons.length}`}</span>
                         <span className="cursor-pointer hover:text-gray-900 border-l border-gray-200 pl-2">{">"}</span>
                       </div>
                     </div>
@@ -1271,7 +1271,7 @@ export default function PlanDetailPage() {
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-4 rounded border border-gray-200 px-2 py-1 text-[12px] text-gray-500">
                         <ChevronLeft size={12} className="cursor-pointer hover:text-gray-900 border-r border-gray-200 pr-2" />
-                        <span className="text-gray-900 font-medium">{planPriceLists.length === 0 ? "0 - 0" : `1 - ${planPriceLists.length}`}</span>
+                        <span className="text-gray-900 font-medium">{planPriceLists.length === 0 ? "0 to 0" : `1 to ${planPriceLists.length}`}</span>
                         <ChevronRight size={12} className="cursor-pointer hover:text-gray-900 border-l border-gray-200 pl-2" />
                       </div>
                     </div>

@@ -767,7 +767,7 @@ export default function ProductDetailPage() {
                     </div>
                     <div className="inline-flex items-center gap-2 rounded-md border border-[#d1d5db] px-3 py-1 text-[14px] text-[#334155]">
                       <ChevronLeft size={13} className="text-[#94a3b8]" />
-                      <span>{productPlans.length === 0 ? "0 - 0" : `1 - ${productPlans.length}`}</span>
+                      <span>{productPlans.length === 0 ? "0 to 0" : `1 to ${productPlans.length}`}</span>
                       <ChevronRight size={13} className="text-[#94a3b8]" />
                     </div>
                   </div>
@@ -850,7 +850,7 @@ export default function ProductDetailPage() {
                     </div>
                     <div className="inline-flex items-center gap-2 rounded-md border border-[#d1d5db] px-3 py-1 text-[14px] text-[#334155]">
                       <ChevronLeft size={13} className="text-[#94a3b8]" />
-                      <span>{productAddons.length === 0 ? "0 - 0" : `1 - ${productAddons.length}`}</span>
+                      <span>{productAddons.length === 0 ? "0 to 0" : `1 to ${productAddons.length}`}</span>
                       <ChevronRight size={13} className="text-[#94a3b8]" />
                     </div>
                   </div>
@@ -921,7 +921,7 @@ export default function ProductDetailPage() {
                     </div>
                     <div className="inline-flex items-center gap-2 rounded-md border border-[#d1d5db] px-3 py-1 text-[14px] text-[#334155]">
                       <ChevronLeft size={13} className="text-[#94a3b8]" />
-                      <span>{productCoupons.length === 0 ? "0 - 0" : `1 - ${productCoupons.length}`}</span>
+                      <span>{productCoupons.length === 0 ? "0 to 0" : `1 to ${productCoupons.length}`}</span>
                       <ChevronRight size={13} className="text-[#94a3b8]" />
                     </div>
                   </div>

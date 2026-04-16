@@ -185,7 +185,7 @@ export const getNextSalesReceiptNumber: express.RequestHandler = async (req, res
   const orgId = requireOrgId(req, res);
   if (!orgId) return;
 
-  const prefix = asString(req.query.prefix || "SR-");
+  const prefix = asString(req.query.prefix || "SR").replace(/[^A-Za-z0-9]/g, "") || "SR";
   const last = await SalesReceipt.findOne({ organizationId: orgId, receiptNumber: new RegExp(`^${prefix}`) })
     .sort({ receiptNumber: -1 })
     .lean();

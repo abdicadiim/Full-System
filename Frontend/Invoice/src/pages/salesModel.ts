@@ -40,6 +40,11 @@ const cachedFetch = async <T,>(
   return promise;
 };
 
+export const formatSalesReceiptNumber = (value: any) =>
+  String(value ?? "")
+    .trim()
+    .replace(/[^A-Za-z0-9]/g, "");
+
 export interface ContactPerson {
   id?: string;
   _id?: string;
@@ -1798,7 +1803,16 @@ export interface CreditNote {
   }>;
   journalEntry?: any;
   discount?: number;
+  discountType?: string;
   shipping?: number;
+  shippingCharges?: number;
+  shippingChargeTax?: string;
+  shippingTaxAmount?: number;
+  shippingTaxName?: string;
+  shippingTaxRate?: number;
+  taxExclusive?: string;
+  roundOff?: number;
+  adjustment?: number;
   vat?: number;
   taxes?: any[]; // For tax breakdown
 }
@@ -1908,7 +1922,7 @@ export const saveCreditNote = async (creditNoteData: Partial<CreditNote>): Promi
     if (response && response.success && response.data) {
       return response.data;
     }
-    throw new Error('Failed to save credit note');
+    throw new Error(String((response as any)?.message || "Failed to save credit note"));
   } catch (error) {
     console.error("Error saving credit note to API:", error);
     throw error;
@@ -1969,7 +1983,7 @@ export const updateCreditNote = async (creditNoteId: string, creditNoteData: Par
     if (response && response.success && response.data) {
       return response.data;
     }
-    throw new Error('Failed to update credit note');
+    throw new Error(String((response as any)?.message || "Failed to update credit note"));
   } catch (error) {
     console.error("Error updating credit note in API:", error);
     throw error;
@@ -2290,6 +2304,9 @@ export interface Quote {
   discountAccount?: string;
   shippingCharges?: number;
   shippingChargeTax?: string;
+  shippingTaxAmount?: number;
+  shippingTaxName?: string;
+  shippingTaxRate?: number;
   adjustment?: number;
   roundOff?: number;
   total: number;
@@ -2468,10 +2485,38 @@ export const mapQuoteFromApi = (quote: any): Quote => {
     discount: Number(quote?.discount || 0) || 0,
     discountType: quote?.discountType || 'percent',
     discountAccount: quote?.discountAccount || 'General Income',
-    shippingCharges: Number(quote?.shippingCharges || 0) || 0,
-    shippingChargeTax: String(quote?.shippingChargeTax || ''),
-    adjustment: Number(quote?.adjustment || 0) || 0,
-    roundOff: Number(quote?.roundOff || 0) || 0,
+    shippingCharges: Number(
+      quote?.shippingCharges ??
+      quote?.shipping ??
+      quote?.shippingCharge ??
+      quote?.shippingAmount ??
+      quote?.shipmentCharges ??
+      quote?.shipping_charges ??
+      quote?.shipping_charge ??
+      quote?.shipping_amount ??
+      0
+    ) || 0,
+    shippingChargeTax: String(quote?.shippingChargeTax || quote?.shippingTax || quote?.shipping_tax || quote?.shippingTaxId || quote?.shipping_tax_id || '').trim(),
+    shippingTaxAmount: Number(quote?.shippingTaxAmount ?? quote?.shippingTax ?? quote?.shipping_tax_amount ?? quote?.shipping_tax ?? 0) || 0,
+    shippingTaxName: String(quote?.shippingTaxName || quote?.shipping_tax_name || ''),
+    shippingTaxRate: Number(quote?.shippingTaxRate ?? quote?.shipping_tax_rate ?? 0) || 0,
+    adjustment: Number(
+      quote?.adjustment ??
+      quote?.adjustments ??
+      quote?.roundingAdjustment ??
+      quote?.adjustmentAmount ??
+      quote?.adjustment_amount ??
+      quote?.rounding_adjustment ??
+      0
+    ) || 0,
+    roundOff: Number(
+      quote?.roundOff ??
+      quote?.rounding ??
+      quote?.roundOffAmount ??
+      quote?.round_off ??
+      quote?.rounding_amount ??
+      0
+    ) || 0,
     total: Number(quote?.total || 0) || 0,
     currency: quote?.currency,
     status: quote?.status || 'draft',
@@ -2591,8 +2636,12 @@ export const saveQuote = async (quoteData: Partial<Quote>, retryCount = 0): Prom
       discountType: quoteData.discountType || 'percent',
       discountAccount: quoteData.discountAccount || 'General Income',
       shippingCharges: parseFloat(String(quoteData.shippingCharges || 0)) || 0,
-      shippingChargeTax: String(quoteData.shippingChargeTax || ''),
-      adjustment: parseFloat(String(quoteData.adjustment || 0)) || 0,
+      shippingChargeTax: String(quoteData.shippingChargeTax || (quoteData as any).shippingTax || (quoteData as any).shipping_tax || (quoteData as any).shippingTaxId || ''),
+      shippingTaxAmount: parseFloat(String((quoteData as any).shippingTaxAmount ?? (quoteData as any).shippingTax ?? (quoteData as any).shipping_tax_amount ?? 0)) || 0,
+      shippingTaxName: String((quoteData as any).shippingTaxName || (quoteData as any).shipping_tax_name || ''),
+      shippingTaxRate: parseFloat(String((quoteData as any).shippingTaxRate ?? (quoteData as any).shipping_tax_rate ?? 0)) || 0,
+      adjustment: parseFloat(String(quoteData.adjustment ?? (quoteData as any).adjustments ?? (quoteData as any).roundingAdjustment ?? (quoteData as any).adjustmentAmount ?? (quoteData as any).adjustment_amount ?? 0)) || 0,
+      roundOff: parseFloat(String((quoteData as any).roundOff ?? (quoteData as any).rounding ?? (quoteData as any).roundOffAmount ?? (quoteData as any).round_off ?? 0)) || 0,
       taxExclusive: quoteData.taxExclusive || 'Tax Exclusive',
       location: String((quoteData as any).location || (quoteData as any).selectedLocation || ""),
       total: parseFloat(String(quoteData.total || 0)) || 0,
@@ -2775,8 +2824,20 @@ export const updateQuote = async (quoteId: string, quoteData: Partial<Quote>): P
     if (quoteData.shippingChargeTax !== undefined) {
       apiData.shippingChargeTax = String(quoteData.shippingChargeTax || '');
     }
+    if ((quoteData as any).shippingTaxAmount !== undefined) {
+      apiData.shippingTaxAmount = parseFloat(String((quoteData as any).shippingTaxAmount || 0)) || 0;
+    }
+    if ((quoteData as any).shippingTaxName !== undefined) {
+      apiData.shippingTaxName = String((quoteData as any).shippingTaxName || "");
+    }
+    if ((quoteData as any).shippingTaxRate !== undefined) {
+      apiData.shippingTaxRate = parseFloat(String((quoteData as any).shippingTaxRate || 0)) || 0;
+    }
     if (quoteData.adjustment !== undefined) {
       apiData.adjustment = parseFloat(String(quoteData.adjustment || 0)) || 0;
+    }
+    if ((quoteData as any).roundOff !== undefined) {
+      apiData.roundOff = parseFloat(String((quoteData as any).roundOff || 0)) || 0;
     }
 
     const response = await quotesAPI.update(quoteId, apiData);

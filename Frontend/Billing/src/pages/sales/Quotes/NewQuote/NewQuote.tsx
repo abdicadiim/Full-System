@@ -67,6 +67,20 @@ const NewQuote = () => {
   const isEditMode = !!quoteId;
   const isSubscriptionMode = location.pathname.includes("/sales/quotes/subscription/new");
   const clonedDataFromState = location.state?.clonedData || null;
+  const readPersistedEditQuote = () => {
+    if (!isEditMode || !quoteId || typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(`quote_edit_${quoteId}`) || localStorage.getItem(`quote_detail_${quoteId}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
+  const initialQuoteSource =
+    (location.state as any)?.preloadedQuote ||
+    clonedDataFromState ||
+    readPersistedEditQuote() ||
+    null;
   const cachedGeneralSettings = settingsAPI.getCachedGeneralSettings?.() || {};
   const cachedTaxModeSetting = String(
     cachedGeneralSettings?.taxSettings?.taxInclusive ??
@@ -89,6 +103,63 @@ const NewQuote = () => {
     }
     return "Tax Exclusive";
   })();
+  const formatInitialQuoteDate = (value: any) => {
+    if (!value) return "";
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) return "";
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) return trimmed;
+      const parts = trimmed.split("/");
+      if (parts.length === 3) {
+        const [day, month, year] = parts.map((part) => part.trim());
+        if (day.length === 2 && month.length === 2 && year.length === 4) {
+          return trimmed;
+        }
+      }
+      const parsed = new Date(trimmed);
+      if (!Number.isNaN(parsed.getTime())) {
+        const day = String(parsed.getDate()).padStart(2, "0");
+        const month = String(parsed.getMonth() + 1).padStart(2, "0");
+        const year = parsed.getFullYear();
+        return `${day}/${month}/${year}`;
+      }
+      return trimmed;
+    }
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      const day = String(parsed.getDate()).padStart(2, "0");
+      const month = String(parsed.getMonth() + 1).padStart(2, "0");
+      const year = parsed.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+    return String(value || "");
+  };
+  const initialQuoteNumber = (() => {
+    const source = initialQuoteSource as any;
+    const numberValue =
+      source?.quoteNumber ||
+      source?.quoteNo ||
+      source?.quote_no ||
+      source?.number ||
+      source?.estimateNumber ||
+      source?.estimateNo ||
+      source?.estimate_no ||
+      source?.id ||
+      source?._id ||
+      "";
+    return String(numberValue || transactionNumberSeriesAPI.getCachedNextNumber({
+      module: "Quote",
+      locationName: "Head Office",
+    }) || "").trim();
+  })();
+  const initialQuoteDate = (() => {
+    const source = initialQuoteSource as any;
+    return formatInitialQuoteDate(source?.quoteDate || source?.date || source?.createdAt) || new Date().toLocaleDateString("en-GB");
+  })();
+  const initialExpiryDate = (() => {
+    const source = initialQuoteSource as any;
+    return formatInitialQuoteDate(source?.expiryDate || source?.expiry || source?.validUntil);
+  })();
   const [isLoading, setIsLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState<null | "draft" | "send">(null);
   const [taxes, setTaxes] = useState<Tax[]>([]);
@@ -97,13 +168,10 @@ const NewQuote = () => {
     customerName: "",
     selectedLocation: "Head Office",
     selectedPriceList: "Select Price List",
-    quoteNumber: transactionNumberSeriesAPI.getCachedNextNumber({
-      module: "Quote",
-      locationName: "Head Office",
-    }) || "",
+    quoteNumber: initialQuoteNumber,
     referenceNumber: "",
-    quoteDate: new Date().toLocaleDateString("en-GB"), // DD/MM/YYYY format which our salesModel now handles
-    expiryDate: "",
+    quoteDate: initialQuoteDate, // DD/MM/YYYY format which our salesModel now handles
+    expiryDate: initialExpiryDate,
     salesperson: "",
     salespersonId: "",
     projectName: "",
@@ -1317,7 +1385,9 @@ const NewQuote = () => {
             const resolvedNextDigits = resolveSeriesNextDigits(resolvedSeriesRow);
             setQuotePrefix(resolvedPrefix);
             setQuoteNextNumber(resolvedNextDigits);
-            setFormData(prev => ({ ...prev, quoteNumber: buildQuoteNumber(resolvedPrefix, resolvedNextDigits) }));
+            if (!isEditMode) {
+              setFormData(prev => ({ ...prev, quoteNumber: buildQuoteNumber(resolvedPrefix, resolvedNextDigits) }));
+            }
           }
         } else {
           console.error("Error loading transaction number series:", txSeriesResult.reason);
@@ -1326,7 +1396,9 @@ const NewQuote = () => {
         if (!resolvedSeriesRow) {
           setQuotePrefix("");
           setQuoteNextNumber("");
-          setFormData(prev => ({ ...prev, quoteNumber: "" }));
+          if (!isEditMode) {
+            setFormData(prev => ({ ...prev, quoteNumber: "" }));
+          }
         }
 
         if (!isEditMode && resolvedSeriesRow && !quoteSeriesSyncRef.current) {
@@ -1524,6 +1596,74 @@ const NewQuote = () => {
       if (isEditMode && quoteId && salespersons.length >= 0) {
         setIsLoading(true);
         try {
+          const pickText = (...values: any[]) => {
+            for (const value of values) {
+              if (value === null || value === undefined) continue;
+              const text = String(value).trim();
+              if (text) return text;
+            }
+            return "";
+          };
+          const resolveDateText = (value: any): string => {
+            if (!value) return "";
+            if (typeof value === "string") {
+              const trimmed = value.trim();
+              if (!trimmed) return "";
+              if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) return trimmed;
+              const parts = trimmed.split("/");
+              if (parts.length === 3) {
+                const parsed = new Date(trimmed);
+                if (!Number.isNaN(parsed.getTime())) {
+                  const day = String(parsed.getDate()).padStart(2, "0");
+                  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+                  const year = parsed.getFullYear();
+                  return `${day}/${month}/${year}`;
+                }
+              }
+            }
+            const parsed = new Date(value);
+            if (!Number.isNaN(parsed.getTime())) {
+              const day = String(parsed.getDate()).padStart(2, "0");
+              const month = String(parsed.getMonth() + 1).padStart(2, "0");
+              const year = parsed.getFullYear();
+              return `${day}/${month}/${year}`;
+            }
+            return String(value || "");
+          };
+
+          const cachedQuote = initialQuoteSource;
+          const cachedQuoteNumber = pickText(
+            (cachedQuote as any)?.quoteNumber,
+            (cachedQuote as any)?.quoteNo,
+            (cachedQuote as any)?.quote_no,
+            (cachedQuote as any)?.number,
+            (cachedQuote as any)?.estimateNumber,
+            (cachedQuote as any)?.estimateNo,
+            (cachedQuote as any)?.estimate_no,
+            (cachedQuote as any)?.id,
+            (cachedQuote as any)?._id
+          );
+          const cachedQuoteDate = pickText(
+            resolveDateText((cachedQuote as any)?.quoteDate || (cachedQuote as any)?.date || (cachedQuote as any)?.createdAt),
+            (cachedQuote as any)?.quoteDate,
+            (cachedQuote as any)?.date,
+            (cachedQuote as any)?.createdAt
+          );
+          const cachedExpiryDate = pickText(
+            resolveDateText((cachedQuote as any)?.expiryDate || (cachedQuote as any)?.expiry || (cachedQuote as any)?.validUntil),
+            (cachedQuote as any)?.expiryDate,
+            (cachedQuote as any)?.expiry,
+            (cachedQuote as any)?.validUntil
+          );
+          if (cachedQuote) {
+            setFormData((prev: any) => ({
+              ...prev,
+              quoteNumber: cachedQuoteNumber || prev.quoteNumber,
+              quoteDate: cachedQuoteDate || prev.quoteDate,
+              expiryDate: cachedExpiryDate || prev.expiryDate,
+            }));
+          }
+
           let quote = await getQuoteById(quoteId);
 
           // Try numeric ID if not found
@@ -1537,26 +1677,15 @@ const NewQuote = () => {
             quote = quotes.find(q => q.quoteNumber === quoteId);
           }
 
-          if (quote) {
+          const loadedQuote = quote || cachedQuote;
+
+          if (loadedQuote) {
             // Format dates for display
-            const formatDateForInput = (dateString: any) => {
-              if (!dateString) return "";
-              try {
-                const date = new Date(dateString);
-                if (isNaN(date.getTime())) return "";
-                const day = String(date.getDate()).padStart(2, "0");
-                const month = String(date.getMonth() + 1).padStart(2, "0");
-                const year = date.getFullYear();
-                return `${day}/${month}/${year}`;
-              } catch (error) {
-                console.error("Error formatting date:", error);
-                return "";
-              }
-            };
+            const formatDateForInput = resolveDateText;
 
             // Map quote items to form items format
             // Map quote items to form items format
-            const mappedItems = (quote.items || []).map((item: any, index: number) => {
+            const mappedItems = (loadedQuote.items || []).map((item: any, index: number) => {
               const quantity = parseFloat(item.quantity) || 1;
               const rate = parseFloat(item.unitPrice || item.rate || item.price) || 0;
               const amount = parseFloat(item.total || item.amount || (quantity * rate)) || 0;
@@ -1620,59 +1749,92 @@ const NewQuote = () => {
               };
             });
 
-            const subTotalValue = resolveSubtotalFromQuoteLike(quote, mappedItems);
-            const totalTaxValue = toNumberSafe(quote.totalTax ?? quote.taxAmount ?? quote.tax);
-            const normalizedDiscount = normalizeDiscountForForm(quote, subTotalValue, totalTaxValue);
+            const subTotalValue = resolveSubtotalFromQuoteLike(loadedQuote, mappedItems);
+            const totalTaxValue = toNumberSafe(loadedQuote?.totalTax ?? loadedQuote?.taxAmount ?? loadedQuote?.tax);
+            const normalizedDiscount = normalizeDiscountForForm(loadedQuote, subTotalValue, totalTaxValue);
 
             // Get customer name - check both customer and customerName fields
-            const customerName = quote.customerName || quote.customer || "";
+            const customerName = pickText(loadedQuote?.customerName, loadedQuote?.customer?.displayName, loadedQuote?.customer?.name, loadedQuote?.customer);
+            const quoteNumberValue = String(
+              pickText(
+                loadedQuote?.quoteNumber,
+                (loadedQuote as any)?.quoteNo,
+                (loadedQuote as any)?.quote_no,
+                (loadedQuote as any)?.number,
+                (loadedQuote as any)?.estimateNumber,
+                (loadedQuote as any)?.estimateNo,
+                (loadedQuote as any)?.estimate_no,
+                loadedQuote?.id,
+                (loadedQuote as any)?._id,
+                cachedQuoteNumber
+              )
+            ).trim();
+            const quoteDateValue = pickText(
+              formatDateForInput(loadedQuote?.quoteDate || loadedQuote?.date || loadedQuote?.createdAt),
+              cachedQuoteDate,
+              formatDateForInput((loadedQuote as any)?.quoteDate),
+              formatDateForInput((loadedQuote as any)?.date),
+              formatDateForInput((loadedQuote as any)?.createdAt)
+            );
+            const expiryDateValue = pickText(
+              formatDateForInput((loadedQuote as any)?.expiryDate || (loadedQuote as any)?.expiry || (loadedQuote as any)?.validUntil),
+              cachedExpiryDate,
+              formatDateForInput((loadedQuote as any)?.expiryDate),
+              formatDateForInput((loadedQuote as any)?.expiry),
+              formatDateForInput((loadedQuote as any)?.validUntil)
+            );
 
             setFormData(prev => ({
               ...prev,
               customerName: customerName,
-              selectedLocation: (quote as any).selectedLocation || (quote as any).location || prev.selectedLocation,
-              selectedPriceList: (quote as any).selectedPriceList || (quote as any).priceList || (quote as any).priceListName || prev.selectedPriceList,
-              quoteNumber: quote.quoteNumber || quote.id || "",
-              referenceNumber: quote.referenceNumber || "",
-              quoteDate: formatDateForInput(quote.quoteDate || quote.date),
-              expiryDate: formatDateForInput(quote.expiryDate),
-              salesperson: quote.salesperson || prev.salesperson,
-              salespersonId: quote.salespersonId || prev.salespersonId,
-              projectName: quote.projectName || prev.projectName,
-              subject: quote.subject || prev.subject,
-              taxExclusive: quote.taxExclusive || prev.taxExclusive,
+              selectedLocation: pickText((loadedQuote as any).selectedLocation, (loadedQuote as any).location, prev.selectedLocation),
+              selectedPriceList: pickText((loadedQuote as any).selectedPriceList, (loadedQuote as any).priceList, (loadedQuote as any).priceListName, prev.selectedPriceList),
+              quoteNumber: quoteNumberValue || prev.quoteNumber,
+              referenceNumber: pickText((loadedQuote as any).referenceNumber, prev.referenceNumber),
+              quoteDate: quoteDateValue || prev.quoteDate,
+              expiryDate: expiryDateValue || prev.expiryDate,
+              salesperson: pickText((loadedQuote as any).salesperson, prev.salesperson),
+              salespersonId: pickText((loadedQuote as any).salespersonId, prev.salespersonId),
+              projectName: pickText((loadedQuote as any).projectName, prev.projectName),
+              subject: pickText((loadedQuote as any).subject, prev.subject),
+              taxExclusive: pickText((loadedQuote as any).taxExclusive, prev.taxExclusive),
               items: mappedItems.length > 0 ? mappedItems : [{ id: 1, itemType: "item", itemDetails: "", quantity: 1, rate: 0, tax: "", amount: 0, reportingTags: [] }],
               subTotal: subTotalValue,
               totalTax: totalTaxValue,
               discount: normalizedDiscount.discountValue,
               discountType: normalizedDiscount.discountTypeValue,
-              shippingCharges: Number(quote.shippingCharges || 0),
-              shippingChargeTax: String((quote as any).shippingChargeTax || (quote as any).shippingTax || ""),
-              adjustment: Number(quote.adjustment || 0),
-              roundOff: Number(quote.roundOff || 0),
-              total: Number(quote.total || quote.amount || 0),
-              currency: quote.currency || prev.currency,
-              customerNotes: quote.customerNotes || quote.notes || prev.customerNotes,
-              termsAndConditions: quote.termsAndConditions || quote.terms || prev.termsAndConditions,
-              attachedFiles: quote.attachedFiles || prev.attachedFiles,
-
-              reportingTags: Array.isArray((quote as any).reportingTags) ? (quote as any).reportingTags : prev.reportingTags
+              shippingCharges: Number((loadedQuote as any).shippingCharges || 0),
+              shippingChargeTax: String((loadedQuote as any).shippingChargeTax || (loadedQuote as any).shippingTax || ""),
+              adjustment: Number((loadedQuote as any).adjustment || 0),
+              roundOff: Number((loadedQuote as any).roundOff || 0),
+              total: Number((loadedQuote as any).total || (loadedQuote as any).amount || 0),
+              currency: pickText((loadedQuote as any).currency, prev.currency),
+              customerNotes: pickText((loadedQuote as any).customerNotes, (loadedQuote as any).notes, prev.customerNotes),
+              termsAndConditions: pickText((loadedQuote as any).termsAndConditions, (loadedQuote as any).terms, prev.termsAndConditions),
+              attachedFiles: (loadedQuote as any).attachedFiles || prev.attachedFiles,
+              reportingTags: Array.isArray((loadedQuote as any).reportingTags) ? (loadedQuote as any).reportingTags : prev.reportingTags
+            }));
+            setFormErrors((prev: any) => ({
+              ...prev,
+              quoteNumber: "",
+              quoteDate: "",
+              expiryDate: ""
             }));
 
             // Sync calendar state with the loaded dates
-            const parsedQuoteDate = new Date(quote.quoteDate || quote.date);
+            const parsedQuoteDate = new Date(loadedQuote?.quoteDate || loadedQuote?.date || loadedQuote?.createdAt);
             if (!isNaN(parsedQuoteDate.getTime())) setQuoteDateCalendar(parsedQuoteDate);
 
-            if (quote.expiryDate) {
-              const parsedExpiryDate = new Date(quote.expiryDate);
+            if (loadedQuote?.expiryDate || (loadedQuote as any)?.expiry || (loadedQuote as any)?.validUntil) {
+              const parsedExpiryDate = new Date(loadedQuote?.expiryDate || (loadedQuote as any)?.expiry || (loadedQuote as any)?.validUntil);
               if (!isNaN(parsedExpiryDate.getTime())) setExpiryDateCalendar(parsedExpiryDate);
             }
 
             // Set selected customer if exists - check both customer and customerName
             if (customerName) {
               const loadedCustomers = await getCustomers();
-              const customer = loadedCustomers.find(c =>
-                c.name === customerName || c.name === quote.customer || c.name === quote.customerName
+            const customer = loadedCustomers.find(c =>
+                c.name === customerName || c.name === loadedQuote?.customer || c.name === loadedQuote?.customerName
               );
               if (customer) {
                 setSelectedCustomer(customer);

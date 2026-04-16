@@ -701,6 +701,54 @@ export function useNewQuoteCustomerSearch(controller: any) {
           return String(value).trim();
         };
 
+        const resolveDateText = (value: any): string => {
+          if (!value) return "";
+          if (typeof value === "string") {
+            const trimmed = value.trim();
+            if (!trimmed) return "";
+            if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) return trimmed;
+            const parts = trimmed.split("/");
+            if (parts.length === 3 && parts[0].length === 2 && parts[1].length === 2) {
+              return trimmed;
+            }
+            const date = new Date(trimmed);
+            if (!Number.isNaN(date.getTime())) {
+              const day = String(date.getDate()).padStart(2, "0");
+              const month = String(date.getMonth() + 1).padStart(2, "0");
+              const year = date.getFullYear();
+              return `${day}/${month}/${year}`;
+            }
+            return trimmed;
+          }
+          const date = new Date(value);
+          if (!Number.isNaN(date.getTime())) {
+            const day = String(date.getDate()).padStart(2, "0");
+            const month = String(date.getMonth() + 1).padStart(2, "0");
+            const year = date.getFullYear();
+            return `${day}/${month}/${year}`;
+          }
+          return resolveText(value);
+        };
+
+        const parseFlexibleDate = (value: any): Date | null => {
+          if (!value) return null;
+          if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+          if (typeof value === "string") {
+            const trimmed = value.trim();
+            if (!trimmed) return null;
+            const slashParts = trimmed.split("/");
+            if (slashParts.length === 3) {
+              const day = parseInt(slashParts[0], 10);
+              const month = parseInt(slashParts[1], 10) - 1;
+              const year = parseInt(slashParts[2], 10);
+              const ddmmyyyy = new Date(year, month, day);
+              if (!Number.isNaN(ddmmyyyy.getTime())) return ddmmyyyy;
+            }
+          }
+          const date = new Date(value);
+          return Number.isNaN(date.getTime()) ? null : date;
+        };
+
         const normalizeAddressState = (address: any, fallbackLine = "") => {
           const fallback = String(fallbackLine || "").trim();
           if (!address && !fallback) return null;
@@ -910,16 +958,71 @@ export function useNewQuoteCustomerSearch(controller: any) {
           const fallbackCustomer = buildFallbackCustomer(quote, quoteContactPersons, quoteBillingAddress, quoteShippingAddress);
           const fallbackSalesperson = buildFallbackSalesperson(quote);
           const fallbackProject = buildFallbackProject(quote);
+          const quoteNumberValue = resolveText(
+            quote.quoteNumber ||
+            (quote as any).quoteNo ||
+            (quote as any).quote_no ||
+            (quote as any).number ||
+            (quote as any).estimateNumber ||
+            (quote as any).estimateNo ||
+            (quote as any).estimate_no ||
+            quote.id ||
+            quote._id
+          );
+          const quoteDateValue = resolveDateText(quote.quoteDate || quote.date || quote.createdAt);
+          const expiryDateValue = resolveDateText(quote.expiryDate || (quote as any).expiry || (quote as any).validUntil);
+          const shippingChargesValue = Number(
+            quote.shippingCharges ??
+            (quote as any).shipping ??
+            (quote as any).shippingCharge ??
+            (quote as any).shippingAmount ??
+            (quote as any).shipmentCharges ??
+            (quote as any).shipping_charges ??
+            0
+          ) || 0;
+          const adjustmentValue = Number(
+            quote.adjustment ??
+            (quote as any).adjustments ??
+            (quote as any).roundingAdjustment ??
+            (quote as any).adjustmentAmount ??
+            (quote as any).adjustment_amount ??
+            0
+          ) || 0;
+          const roundOffValue = Number(
+            quote.roundOff ??
+            (quote as any).rounding ??
+            (quote as any).roundOffAmount ??
+            (quote as any).round_off ??
+            0
+          ) || 0;
+          const shippingTaxSelection = resolveText(
+            (quote as any).shippingChargeTax ||
+            (quote as any).shippingTaxId ||
+            (quote as any).shippingTax ||
+            (quote as any).shippingTaxName ||
+            ""
+          );
+
+          if (isEditMode) {
+            setQuoteNumberMode("auto");
+            if (quoteNumberValue) {
+              const derivedPrefix = deriveQuotePrefixFromNumber(quoteNumberValue, quotePrefix || "QT-");
+              const derivedDigits = extractQuoteDigits(quoteNumberValue);
+              if (derivedPrefix) setQuotePrefix(derivedPrefix);
+              if (derivedDigits) setQuoteNextNumber(derivedDigits);
+              quoteSeriesSyncRef.current = true;
+            }
+          }
 
           setFormData(prev => ({
             ...prev,
             customerName,
             selectedLocation: quoteLocation,
             selectedPriceList: quotePriceList,
-            quoteNumber: resolveText(quote.quoteNumber || quote.id),
+            quoteNumber: quoteNumberValue,
             referenceNumber: resolveText(quote.referenceNumber),
-            quoteDate: formatDateForInput(quote.quoteDate || quote.date),
-            expiryDate: formatDateForInput(quote.expiryDate),
+            quoteDate: quoteDateValue,
+            expiryDate: expiryDateValue,
             salesperson: salespersonName,
             salespersonId,
             projectName,
@@ -931,10 +1034,10 @@ export function useNewQuoteCustomerSearch(controller: any) {
             totalTax: totalTaxValue,
             discount: normalizedDiscount.discountValue ?? 0,
             discountType: normalizedDiscount.discountTypeValue ?? "percent",
-            shippingCharges: Number(quote.shippingCharges || 0) || 0,
-            shippingChargeTax: resolveText((quote as any).shippingChargeTax || (quote as any).shippingTax || ""),
-            adjustment: Number(quote.adjustment || 0) || 0,
-            roundOff: Number(quote.roundOff || 0) || 0,
+            shippingCharges: shippingChargesValue,
+            shippingChargeTax: shippingTaxSelection || prev.shippingChargeTax || "",
+            adjustment: adjustmentValue,
+            roundOff: roundOffValue,
             total: Number(quote.total || quote.amount || 0) || 0,
             currency: resolveText(quote.currency) || baseCurrencyCode || prev.currency,
             status: resolveText(quote.status) || "Draft",
@@ -943,11 +1046,21 @@ export function useNewQuoteCustomerSearch(controller: any) {
             attachedFiles: Array.isArray((quote as any).attachedFiles) ? (quote as any).attachedFiles : [],
             reportingTags: Array.isArray((quote as any).reportingTags) ? (quote as any).reportingTags : []
           }));
+          setFormErrors((prev: any) => ({
+            ...prev,
+            quoteNumber: "",
+            quoteDate: "",
+            expiryDate: ""
+          }));
 
           setContactPersons(quoteContactPersons);
           setSelectedContactPersons(quoteContactPersons);
           setBillingAddress(quoteBillingAddress || (fallbackCustomer as any)?.billingAddress || null);
           setShippingAddress(quoteShippingAddress || (fallbackCustomer as any)?.shippingAddress || null);
+          setSelectedCustomer(fallbackCustomer as any);
+          setSelectedCustomerIdForProjects(
+            resolveText((quote as any).customerId || (fallbackCustomer as any)?.id || (fallbackCustomer as any)?._id || "")
+          );
 
           const quoteCustomerId = resolveText((quote as any).customerId || (quote as any).customer?._id || (quote as any).customer?.id || "");
           const loadedCustomers = await getCustomers();
@@ -1060,13 +1173,11 @@ export function useNewQuoteCustomerSearch(controller: any) {
             }
           }
 
-          const parsedQuoteDate = new Date(quote.quoteDate || quote.date);
-          if (!isNaN(parsedQuoteDate.getTime())) setQuoteDateCalendar(parsedQuoteDate);
+          const parsedQuoteDate = parseFlexibleDate(quote.quoteDate || quote.date || quote.createdAt);
+          if (parsedQuoteDate) setQuoteDateCalendar(parsedQuoteDate);
 
-          if (quote.expiryDate) {
-            const parsedExpiryDate = new Date(quote.expiryDate);
-            if (!isNaN(parsedExpiryDate.getTime())) setExpiryDateCalendar(parsedExpiryDate);
-          }
+          const parsedExpiryDate = parseFlexibleDate(quote.expiryDate || (quote as any).expiry || (quote as any).validUntil);
+          if (parsedExpiryDate) setExpiryDateCalendar(parsedExpiryDate);
         };
 
         try {
@@ -1088,8 +1199,18 @@ export function useNewQuoteCustomerSearch(controller: any) {
             quote = quotes.find(q => q.quoteNumber === quoteId);
           }
 
-          if (quote) {
-            await applyQuoteToForm(quote);
+          const mergedQuote = quote
+            ? {
+              ...(cachedQuote || {}),
+              ...quote,
+              items: Array.isArray(quote.items) && quote.items.length > 0
+                ? quote.items
+                : (Array.isArray(cachedQuote?.items) ? cachedQuote.items : quote.items),
+            }
+            : cachedQuote;
+
+          if (mergedQuote) {
+            await applyQuoteToForm(mergedQuote);
           } else {
             console.error("Quote not found with ID:", quoteId);
           }

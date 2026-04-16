@@ -251,7 +251,7 @@ export default function NewSalesReceipt() {
     selectedLocation: "Head Office",
     reportingTags: [],
     selectedPriceList: "",
-    receiptNumber: "SR-00001",
+    receiptNumber: "SR00001",
     salesperson: "",
     taxInclusive: "Tax Inclusive",
     items: [

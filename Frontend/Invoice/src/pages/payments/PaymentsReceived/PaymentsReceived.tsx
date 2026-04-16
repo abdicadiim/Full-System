@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import PaginationFooter from "../../../components/ui/PaginationFooter";
 import { getPayments, getPaymentById, getCustomViews, deleteCustomView, updatePayment, deletePayment, CustomView } from "../../salesModel";
 import { useCurrency } from "../../../hooks/useCurrency";
 import { settingsAPI, bankAccountsAPI, paymentModesAPI } from "../../../services/api";
@@ -136,8 +135,6 @@ export default function PaymentsReceived() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [filteredPayments, setFilteredPayments] = useState<Payment[]>([]);
   const [selectedPayments, setSelectedPayments] = useState<Set<string | number>>(new Set());
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(25);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: string }>({ key: "paymentDate", direction: "asc" });
   const paymentsQuery = useQuery({
     queryKey: ["payments-received", "list"],
@@ -802,19 +799,12 @@ export default function PaymentsReceived() {
     });
   };
 
-  const totalPaymentPages = Math.max(1, Math.ceil(filteredPayments.length / itemsPerPage));
-  const safeCurrentPage = Math.min(Math.max(currentPage, 1), totalPaymentPages);
-  const paginatedPayments = useMemo(
-    () => filteredPayments.slice((safeCurrentPage - 1) * itemsPerPage, safeCurrentPage * itemsPerPage),
-    [filteredPayments, safeCurrentPage, itemsPerPage]
-  );
-
   const handleSelectAllPayments = (checked: boolean) => {
-    const pageIds = new Set(paginatedPayments.map((payment) => payment.id));
     if (checked) {
-      setSelectedPayments((prev) => new Set([...Array.from(prev), ...paginatedPayments.map((payment) => payment.id)]));
+      setSelectedPayments((prev) => new Set([...Array.from(prev), ...filteredPayments.map((payment) => payment.id)]));
     } else {
-      setSelectedPayments((prev) => new Set(Array.from(prev).filter((id) => !pageIds.has(id))));
+      const listIds = new Set(filteredPayments.map((payment) => payment.id));
+      setSelectedPayments((prev) => new Set(Array.from(prev).filter((id) => !listIds.has(id))));
     }
   };
 
@@ -1595,7 +1585,7 @@ export default function PaymentsReceived() {
                         <div className="h-5 w-px bg-gray-200" />
                         <input
                           type="checkbox"
-                          checked={paginatedPayments.length > 0 && paginatedPayments.every((payment) => selectedPayments.has(payment.id))}
+                          checked={filteredPayments.length > 0 && filteredPayments.every((payment) => selectedPayments.has(payment.id))}
                           onChange={(e) => handleSelectAllPayments(e.target.checked)}
                           style={{ accentColor: "#1b5e6a" }}
                           className="cursor-pointer h-4 w-4 rounded border-gray-300 transition-all focus:ring-0"
@@ -1661,7 +1651,7 @@ export default function PaymentsReceived() {
                     </tr>
                   ))
                 ) : (
-                    paginatedPayments.map((payment, index) => (
+                    filteredPayments.map((payment, index) => (
                       <tr
                         key={payment.id}
                         onClick={(e) => {
@@ -1776,18 +1766,6 @@ export default function PaymentsReceived() {
           </div>
         )}
       </div>
-
-      <PaginationFooter
-        currentPage={safeCurrentPage}
-        totalItems={filteredPayments.length}
-        totalPages={totalPaymentPages}
-        pageSize={itemsPerPage}
-        onPageChange={setCurrentPage}
-        onPageSizeChange={(pageSize) => {
-          setItemsPerPage(pageSize);
-          setCurrentPage(1);
-        }}
-      />
 
       {/* Bulk Update Modal */}
       {isBulkUpdateModalOpen && (

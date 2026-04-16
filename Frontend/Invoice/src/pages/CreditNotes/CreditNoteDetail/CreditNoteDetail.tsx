@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { getCreditNoteById, getCreditNotes, deleteCreditNote, CreditNote, AttachedFile, updateCreditNote } from "../../salesModel";
+import { getCreditNoteById, getCreditNotes, deleteCreditNote, saveCreditNote, CreditNote, AttachedFile, updateCreditNote } from "../../salesModel";
 import { currenciesAPI, bankAccountsAPI, chartOfAccountsAPI, refundsAPI, creditNotesAPI, invoicesAPI, settingsAPI, customersAPI } from "../../../services/api";
 import ApplyToInvoices from "./ApplyToInvoices";
 import CreditNoteCommentsPanel from "./CreditNoteCommentsPanel";
@@ -159,6 +159,70 @@ export default function CreditNoteDetail() {
   const customizeDropdownRef = useRef<HTMLDivElement>(null);
   const organizationAddressFileInputRef = useRef<HTMLInputElement>(null);
 
+  const mergeCreditNoteLike = (base: any, overlay: any) => {
+    if (!base) return overlay || null;
+    if (!overlay) return base;
+
+    const pick = (...values: any[]) => values.find((value) => value !== undefined && value !== null && value !== "");
+    const pickArray = (...values: any[]) => values.find((value) => Array.isArray(value) && value.length > 0) ?? values.find((value) => Array.isArray(value));
+    const cleanObject = (value: any) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+      return Object.fromEntries(
+        Object.entries(value).filter(([, entryValue]) => entryValue !== undefined && entryValue !== null && entryValue !== "")
+      );
+    };
+    const sanitizedOverlay = Object.fromEntries(
+      Object.entries(overlay).filter(([, value]) => value !== undefined && value !== null && value !== "")
+    );
+    const baseCustomer = base?.customer && typeof base.customer === "object" ? base.customer : null;
+    const overlayCustomer = overlay?.customer && typeof overlay.customer === "object" ? overlay.customer : null;
+
+    return {
+      ...base,
+      ...sanitizedOverlay,
+      customer: overlayCustomer || baseCustomer
+        ? {
+            ...(baseCustomer || {}),
+            ...(cleanObject(overlayCustomer) || {}),
+          }
+        : pick(overlay.customer, base.customer),
+      items: pickArray(overlay.items, overlay.lineItems, overlay.invoiceItems, base.items, base.lineItems, base.invoiceItems),
+      attachedFiles: pickArray(overlay.attachedFiles, overlay.files, base.attachedFiles, base.files),
+      comments: pickArray(overlay.comments, base.comments),
+      allocations: pickArray(overlay.allocations, overlay.appliedInvoices, base.allocations, base.appliedInvoices),
+      creditNoteNumber: pick(overlay.creditNoteNumber, overlay.number, overlay.noteNumber, base.creditNoteNumber, base.number, base.noteNumber),
+      referenceNumber: pick(overlay.referenceNumber, overlay.reference, overlay.referenceNo, base.referenceNumber, base.reference),
+      customerName: pick(
+        overlay.customerName,
+        overlay.customer?.displayName,
+        overlay.customer?.companyName,
+        overlay.customer?.name,
+        base.customerName
+      ),
+      creditNoteDate: pick(overlay.creditNoteDate, overlay.date, base.creditNoteDate, base.date),
+      taxExclusive: pick(overlay.taxExclusive, overlay.taxPreference, base.taxExclusive, base.taxPreference),
+      discount: pick(overlay.discount, base.discount, 0),
+      discountType: pick(overlay.discountType, base.discountType, "percent"),
+      shippingCharges: pick(overlay.shippingCharges, overlay.shipping, base.shippingCharges, base.shipping, 0),
+      shippingChargeTax: pick(
+        overlay.shippingChargeTax,
+        overlay.shippingTax,
+        overlay.shipping_tax,
+        overlay.shippingTaxId,
+        base.shippingChargeTax,
+        base.shippingTax,
+        ""
+      ),
+      shippingTaxAmount: pick(overlay.shippingTaxAmount, overlay.shippingTaxAmountValue, overlay.shippingTax, base.shippingTaxAmount, base.shippingTax, 0),
+      shippingTaxName: pick(overlay.shippingTaxName, overlay.shipping_tax_name, base.shippingTaxName, base.shipping_tax_name, ""),
+      shippingTaxRate: pick(overlay.shippingTaxRate, overlay.shipping_tax_rate, base.shippingTaxRate, base.shipping_tax_rate, 0),
+      adjustment: pick(overlay.adjustment, base.adjustment, 0),
+      roundOff: pick(overlay.roundOff, base.roundOff, 0),
+      total: pick(overlay.total, overlay.amount, base.total, base.amount, 0),
+      status: pick(overlay.status, base.status, "open")
+    };
+  };
+
   const creditNotesListQuery = useQuery({
     queryKey: ["credit-notes", "list"],
     staleTime: 30_000,
@@ -197,7 +261,7 @@ export default function CreditNoteDetail() {
         if (!id) return;
         const creditNoteData = await getCreditNoteById(id);
         if (creditNoteData) {
-          let resolvedCreditNote = creditNoteData as any;
+          let resolvedCreditNote = mergeCreditNoteLike(initialCreditNote || creditNote, creditNoteData) as any;
           const currentCustomerName = String(
             resolvedCreditNote?.customerName ||
             (typeof resolvedCreditNote?.customer === "object"
@@ -234,11 +298,18 @@ export default function CreditNoteDetail() {
           setCreditNote(resolvedCreditNote);
           setCreditNoteAttachments(Array.isArray((resolvedCreditNote as any).attachedFiles) ? (resolvedCreditNote as any).attachedFiles : []);
           setComments(Array.isArray((resolvedCreditNote as any).comments) ? (resolvedCreditNote as any).comments : []);
-        } else {
+        } else if (!initialCreditNote) {
           navigate("/sales/credit-notes");
+        } else {
+          setCreditNote((prev) => mergeCreditNoteLike(initialCreditNote, prev || initialCreditNote) as CreditNote);
         }
       } catch (error) {
         console.error("Error loading credit note:", error);
+        if (!initialCreditNote) {
+          navigate("/sales/credit-notes");
+        } else if (initialCreditNote) {
+          setCreditNote((prev) => mergeCreditNoteLike(initialCreditNote, prev || initialCreditNote) as CreditNote);
+        }
       }
     };
     fetchCreditNoteData();
@@ -654,7 +725,7 @@ Best regards`,
         setIsApplyToInvoicesOpen(false);
         // Refresh data
         const updatedNote = await getCreditNoteById(creditNote.id);
-        if (updatedNote) setCreditNote(updatedNote);
+        if (updatedNote) setCreditNote((prev) => mergeCreditNoteLike(prev || creditNote, updatedNote) as CreditNote);
       } else {
         toast("Failed to apply credits: " + (response.message || "Unknown error"));
       }
@@ -666,7 +737,8 @@ Best regards`,
 
   const handleRemoveAppliedInvoice = async (rowToRemove: any) => {
     if (!creditNote?.id) return;
-    if (!window.confirm("Remove this applied credit from the invoice?")) return;
+    const shouldRemove = await confirmToast("Remove this applied credit from the invoice?");
+    if (!shouldRemove) return;
 
     try {
       const source = (creditNote as any)?.allocations || (creditNote as any)?.appliedInvoices || [];
@@ -710,7 +782,7 @@ Best regards`,
       }
 
       const updatedNote = await getCreditNoteById(creditNote.id);
-      if (updatedNote) setCreditNote(updatedNote);
+      if (updatedNote) setCreditNote((prev) => mergeCreditNoteLike(prev || creditNote, updatedNote) as CreditNote);
       toast("Applied credit removed.");
     } catch (error: any) {
       console.error("Failed to remove applied credit:", error);
@@ -793,7 +865,7 @@ Best regards`,
         ]);
 
         if (updatedCreditNote) {
-          setCreditNote(updatedCreditNote);
+          setCreditNote((prev) => mergeCreditNoteLike(prev || creditNote, updatedCreditNote) as CreditNote);
         }
         if (refundsRes && refundsRes.success && Array.isArray(refundsRes.data)) {
           setRefunds(refundsRes.data);
@@ -871,29 +943,109 @@ Best regards`,
     setIsRefundDatePickerOpen(false);
   };
 
+  const confirmToast = (message: string) =>
+    new Promise<boolean>((resolve) => {
+      let toastId: any;
+      const ConfirmToast = () => (
+        <div className="w-full max-w-sm">
+          <div className="mb-3 text-sm font-medium text-slate-800">{message}</div>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+              onClick={() => {
+                toast.dismiss(toastId);
+                resolve(false);
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="rounded-md px-3 py-1.5 text-sm text-white hover:brightness-95"
+              style={{ backgroundColor: "#156372" }}
+              onClick={() => {
+                toast.dismiss(toastId);
+                resolve(true);
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      );
+
+      toastId = toast(<ConfirmToast />, {
+        position: "top-center",
+        autoClose: false,
+        closeOnClick: false,
+        draggable: false,
+        closeButton: false,
+      });
+    });
+
   const handleDelete = async () => {
     setIsMoreMenuOpen(false);
-    if (window.confirm(`Are you sure you want to delete credit note ${creditNote?.creditNoteNumber || creditNote?.id}? This action cannot be undone.`)) {
-      try {
-        if (!id) {
-          toast('Missing credit note id.');
-          return;
-        }
-        await deleteCreditNote(id);
-        navigate("/sales/credit-notes");
-      } catch (error) {
-        console.error("Error deleting credit note:", error);
-        toast("Failed to delete credit note. Please try again.");
+    const shouldDelete = await confirmToast(
+      `Are you sure you want to delete credit note ${creditNote?.creditNoteNumber || creditNote?.id}? This action cannot be undone.`
+    );
+    if (!shouldDelete) return;
+    try {
+      if (!id) {
+        toast('Missing credit note id.');
+        return;
       }
+      await deleteCreditNote(id);
+      queryClient.setQueryData(["credit-notes", "list"], (current: any) => {
+        const currentList = Array.isArray(current?.creditNotes) ? current.creditNotes : Array.isArray(current) ? current : [];
+        const nextList = currentList.filter((note: any) => String(note?.id || note?._id || "") !== String(id));
+        return Array.isArray(current?.creditNotes) ? { ...current, creditNotes: nextList } : nextList;
+      });
+      await queryClient.invalidateQueries({ queryKey: ["credit-notes", "list"] });
+      toast.success("Credit note deleted successfully.");
+      navigate("/sales/credit-notes", { replace: true });
+    } catch (error) {
+      console.error("Error deleting credit note:", error);
+      toast.error("Failed to delete credit note. Please try again.");
     }
   };
 
-  const handleClone = () => {
+  const handleClone = async () => {
     setIsMoreMenuOpen(false);
-    if (creditNote) {
-      navigate("/sales/credit-notes/new", {
-        state: { clonedData: creditNote }
+    if (!creditNote) return;
+    try {
+      const nextNumberResponse = await creditNotesAPI.getNextNumber();
+      const nextCreditNoteNumber =
+        nextNumberResponse?.data?.nextNumber ||
+        nextNumberResponse?.data?.creditNoteNumber ||
+        nextNumberResponse?.nextNumber ||
+        "";
+
+      const clonedPayload: any = {
+        ...creditNote,
+        id: undefined,
+        _id: undefined,
+        creditNoteNumber: nextCreditNoteNumber || "",
+        creditNoteDate: new Date(),
+        date: new Date(),
+        status: "open",
+        balance: Number((creditNote as any).total ?? creditNote.balance ?? 0) || 0,
+        attachedFiles: [],
+        comments: [],
+        allocations: [],
+        appliedInvoices: [],
+      };
+
+      const clonedCreditNote = await saveCreditNote(clonedPayload);
+      await queryClient.invalidateQueries({ queryKey: ["credit-notes", "list"] });
+      toast.success("Credit note cloned successfully.");
+      navigate(`/sales/credit-notes/${clonedCreditNote.id || clonedCreditNote._id}`, {
+        replace: true,
+        state: { creditNote: clonedCreditNote }
       });
+    } catch (error) {
+      console.error("Error cloning credit note:", error);
+      toast.error("Failed to clone credit note. Please try again.");
     }
   };
 

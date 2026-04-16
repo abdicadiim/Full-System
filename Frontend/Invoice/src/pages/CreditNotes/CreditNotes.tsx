@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import LoadingSpinner from "../../components/LoadingSpinner";
-import PaginationFooter from "../../components/ui/PaginationFooter";
 import { getCreditNotes, getCustomViews, deleteCustomView, getCreditNoteById, updateCreditNote, getCustomers, deleteCreditNote } from "../salesModel";
 import type { CreditNote as SalesCreditNote } from "../salesModel";
 import FieldCustomization from "../shared/FieldCustomization";
@@ -112,8 +111,6 @@ export default function CreditNotes() {
   // React Query hydrates the list; keep filtered list in local state.
   const [filteredCreditNotes, setFilteredCreditNotes] = useState<CreditNote[]>([]);
   const [selectedCreditNotes, setSelectedCreditNotes] = useState<string[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(25);
   const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeletingCreditNotes, setIsDeletingCreditNotes] = useState(false);
@@ -841,20 +838,13 @@ export default function CreditNotes() {
   };
 
   const handleSelectAll = () => {
-    const pageIds = new Set(paginatedCreditNotes.map((note) => note.id));
-    if (paginatedCreditNotes.every((note) => selectedCreditNotes.includes(note.id))) {
-      setSelectedCreditNotes((prev) => prev.filter((id) => !pageIds.has(id)));
+    if (filteredCreditNotes.every((note) => selectedCreditNotes.includes(note.id))) {
+      const listIds = new Set(filteredCreditNotes.map((note) => note.id));
+      setSelectedCreditNotes((prev) => prev.filter((id) => !listIds.has(id)));
     } else {
-      setSelectedCreditNotes((prev) => Array.from(new Set([...prev, ...paginatedCreditNotes.map((note) => note.id)])));
+      setSelectedCreditNotes((prev) => Array.from(new Set([...prev, ...filteredCreditNotes.map((note) => note.id)])));
     }
   };
-
-  const totalCreditNotePages = Math.max(1, Math.ceil((filteredCreditNotes?.length || 0) / itemsPerPage));
-  const safeCurrentPage = Math.min(Math.max(currentPage, 1), totalCreditNotePages);
-  const paginatedCreditNotes = useMemo(
-    () => filteredCreditNotes.slice((safeCurrentPage - 1) * itemsPerPage, safeCurrentPage * itemsPerPage),
-    [filteredCreditNotes, safeCurrentPage, itemsPerPage]
-  );
 
   const handleClearSelection = () => {
     setSelectedCreditNotes([]);
@@ -1314,18 +1304,6 @@ export default function CreditNotes() {
         </div>
       )}
 
-      <PaginationFooter
-        currentPage={safeCurrentPage}
-        totalItems={filteredCreditNotes.length}
-        totalPages={totalCreditNotePages}
-        pageSize={itemsPerPage}
-        onPageChange={setCurrentPage}
-        onPageSizeChange={(pageSize) => {
-          setItemsPerPage(pageSize);
-          setCurrentPage(1);
-        }}
-      />
-
       {/* Bulk Update Modal */}
       {isBulkUpdateModalOpen && (
         <div
@@ -1510,7 +1488,7 @@ export default function CreditNotes() {
                           handleSelectAll();
                         }}
                       >
-                        {paginatedCreditNotes.length > 0 && paginatedCreditNotes.every((note) => selectedCreditNotes.includes(note.id)) ? (
+                        {filteredCreditNotes.length > 0 && filteredCreditNotes.every((note) => selectedCreditNotes.includes(note.id)) ? (
                           <CheckSquare size={16} fill="#6b7280" color="#6b7280" />
                         ) : (
                           <Square size={16} className="text-gray-400" />
@@ -1578,7 +1556,7 @@ export default function CreditNotes() {
                     </td>
                   </tr>
                 ) : (
-                  paginatedCreditNotes.map((note) => {
+                  filteredCreditNotes.map((note) => {
                     const isSelected = selectedCreditNotes.includes(note.id);
                     return (
                       <tr
