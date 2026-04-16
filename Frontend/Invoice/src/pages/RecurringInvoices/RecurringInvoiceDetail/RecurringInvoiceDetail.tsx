@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import type { RecurringInvoice as RecurringInvoiceModel, Invoice as InvoiceModel, Customer as CustomerModel } from "../../salesModel";
 type RecurringInvoice = RecurringInvoiceModel & Record<string, any>;
@@ -6,10 +6,71 @@ type Invoice = InvoiceModel & Record<string, any>;
 type Customer = CustomerModel & Record<string, any>;
 import { getRecurringInvoiceById, getRecurringInvoices, getInvoices, getCustomerById, updateRecurringInvoice, deleteRecurringInvoice, generateInvoiceFromRecurring, saveRecurringInvoice } from "../../salesModel";
 import {
-  Edit, MoreVertical, X, ChevronDown, ChevronUp, Info, FileText, Plus, Square, Search, Star
+  Edit, MoreVertical, X, ChevronDown, ChevronUp, Info, FileText, Plus, Search, Star, Check,
+  ArrowUpDown, Download, FileUp, Settings, RefreshCw, ChevronRight as ChevronRightIcon
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { settingsAPI } from "../../../../services/api";
+import { exportToCSV, exportToExcel, exportToPDF } from "../exportUtils";
+
+type AddressBlock = {
+  attention?: string;
+  street1?: string;
+  street2?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  country?: string;
+  phone?: string;
+  fax?: string;
+};
+
+const resolveAddress = (source: any, kind: "billing" | "shipping"): AddressBlock => {
+  const nested = source?.[`${kind}Address`] || {};
+  return {
+    attention: nested.attention || source?.[`${kind}Attention`] || "",
+    street1: nested.street1 || source?.[`${kind}Street1`] || "",
+    street2: nested.street2 || source?.[`${kind}Street2`] || "",
+    city: nested.city || source?.[`${kind}City`] || "",
+    state: nested.state || source?.[`${kind}State`] || "",
+    zipCode: nested.zipCode || source?.[`${kind}ZipCode`] || "",
+    country: nested.country || source?.[`${kind}Country`] || "",
+    phone: nested.phone || source?.[`${kind}Phone`] || "",
+    fax: nested.fax || source?.[`${kind}Fax`] || ""
+  };
+};
+
+const renderAddress = (address: AddressBlock, emptyLabel: string) => {
+  const hasContent = Boolean(
+    address.attention ||
+    address.street1 ||
+    address.street2 ||
+    address.city ||
+    address.state ||
+    address.zipCode ||
+    address.country ||
+    address.phone ||
+    address.fax
+  );
+
+  if (!hasContent) {
+    return <div className="mt-1 text-sm italic text-gray-500">{emptyLabel}</div>;
+  }
+
+  return (
+    <div className="mt-1 text-sm text-gray-600 leading-6">
+      {address.attention && <div className="font-medium text-gray-900">{address.attention}</div>}
+      {address.street1 && <div>{address.street1}</div>}
+      {address.street2 && <div>{address.street2}</div>}
+      {address.city && <div>{address.city}</div>}
+      {address.state && <div>{address.state}</div>}
+      {address.zipCode && <div>{address.zipCode}</div>}
+      {address.country && <div>{address.country}</div>}
+      {address.phone && <div>Phone: {address.phone}</div>}
+      {address.fax && <div>Fax Number: {address.fax}</div>}
+    </div>
+  );
+};
 
 export default function RecurringInvoiceDetail() {
   const { id } = useParams<{ id: string }>();
@@ -21,7 +82,16 @@ export default function RecurringInvoiceDetail() {
   const [activeTab, setActiveTab] = useState("Overview");
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isAllRecurringInvoicesDropdownOpen, setIsAllRecurringInvoicesDropdownOpen] = useState(false);
+  const [isChildInvoiceFilterOpen, setIsChildInvoiceFilterOpen] = useState(false);
   const [isChildInvoicesExpanded, setIsChildInvoicesExpanded] = useState(true);
+  const [selectedRecurringIds, setSelectedRecurringIds] = useState<string[]>([]);
+  const [isBulkActionsOpen, setIsBulkActionsOpen] = useState(false);
+  const [isSidebarMoreMenuOpen, setIsSidebarMoreMenuOpen] = useState(false);
+  const [isSidebarSortDropdownOpen, setIsSidebarSortDropdownOpen] = useState(false);
+  const [isSidebarExportDropdownOpen, setIsSidebarExportDropdownOpen] = useState(false);
+  const [selectedSidebarSortBy, setSelectedSidebarSortBy] = useState("Created Time");
+  const [sidebarSortOrder, setSidebarSortOrder] = useState("desc");
+  const [childInvoiceFilter, setChildInvoiceFilter] = useState("All");
   const [filterSearch, setFilterSearch] = useState("");
   const [organizationProfile, setOrganizationProfile] = useState<any | null>(null);
   const [recurringInvoiceSettings, setRecurringInvoiceSettings] = useState<any | null>(null);
@@ -40,10 +110,245 @@ export default function RecurringInvoiceDetail() {
   });
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
   const allRecurringInvoicesDropdownRef = useRef<HTMLDivElement | null>(null);
+  const childInvoiceFilterRef = useRef<HTMLDivElement | null>(null);
+  const bulkActionsRef = useRef<HTMLDivElement | null>(null);
+  const sidebarMoreMenuRef = useRef<HTMLDivElement | null>(null);
+  const sidebarSortDropdownRef = useRef<HTMLDivElement | null>(null);
+  const sidebarExportDropdownRef = useRef<HTMLDivElement | null>(null);
 
   const statusFilters = ["All", "Active", "Stopped", "Expired"];
+  const childInvoiceFilters = ["All", "Unpaid", "Paid"];
+  const selectedBillingAddress = useMemo(
+    () => resolveAddress(recurringInvoice || customer, "billing"),
+    [recurringInvoice, customer]
+  );
+  const selectedShippingAddress = useMemo(
+    () => resolveAddress(recurringInvoice || customer, "shipping"),
+    [recurringInvoice, customer]
+  );
+  const hasAnyAddress = Boolean(
+    selectedBillingAddress.attention ||
+    selectedBillingAddress.street1 ||
+    selectedBillingAddress.street2 ||
+    selectedBillingAddress.city ||
+    selectedBillingAddress.state ||
+    selectedBillingAddress.zipCode ||
+    selectedBillingAddress.country ||
+    selectedBillingAddress.phone ||
+    selectedBillingAddress.fax ||
+    selectedShippingAddress.attention ||
+    selectedShippingAddress.street1 ||
+    selectedShippingAddress.street2 ||
+    selectedShippingAddress.city ||
+    selectedShippingAddress.state ||
+    selectedShippingAddress.zipCode ||
+    selectedShippingAddress.country ||
+    selectedShippingAddress.phone ||
+    selectedShippingAddress.fax
+  );
+
+  const filteredChildInvoices = useMemo(() => {
+    if (childInvoiceFilter === "All") return childInvoices;
+    if (childInvoiceFilter === "Paid") {
+      return childInvoices.filter(inv => String(inv.status || "").toLowerCase() === "paid");
+    }
+    return childInvoices.filter(inv => String(inv.status || "").toLowerCase() !== "paid");
+  }, [childInvoiceFilter, childInvoices]);
+
+  const sidebarSortOptions = [
+    "Created Time",
+    "Last Modified Time",
+    "Customer Name",
+    "Profile Name",
+    "Last Invoice Date",
+    "Next Invoice Date",
+    "Amount"
+  ];
+
+  const sortedRecurringInvoices = useMemo(() => {
+    const toTime = (value: any) => {
+      if (!value) return 0;
+      const time = Date.parse(String(value));
+      return Number.isNaN(time) ? 0 : time;
+    };
+
+    const compare = (a: any, b: any) => {
+      const direction = sidebarSortOrder === "asc" ? 1 : -1;
+      const sortKey = String(selectedSidebarSortBy);
+
+      const aName = String(a.customerName || (typeof a.customer === "object" ? (a.customer?.displayName || a.customer?.name) : a.customer) || "").toLowerCase();
+      const bName = String(b.customerName || (typeof b.customer === "object" ? (b.customer?.displayName || b.customer?.name) : b.customer) || "").toLowerCase();
+      const aProfile = String(a.profileName || "").toLowerCase();
+      const bProfile = String(b.profileName || "").toLowerCase();
+
+      switch (sortKey) {
+        case "Last Modified Time":
+          return (toTime(a.updatedAt || a.modifiedAt || a.createdAt) - toTime(b.updatedAt || b.modifiedAt || b.createdAt)) * direction;
+        case "Customer Name":
+          return aName.localeCompare(bName) * direction;
+        case "Profile Name":
+          return aProfile.localeCompare(bProfile) * direction;
+        case "Last Invoice Date":
+          return (toTime(a.lastInvoiceDate || a.lastGeneratedDate) - toTime(b.lastInvoiceDate || b.lastGeneratedDate)) * direction;
+        case "Next Invoice Date":
+          return (toTime(a.nextInvoiceDate || a.startDate || a.startOn) - toTime(b.nextInvoiceDate || b.startDate || b.startOn)) * direction;
+        case "Amount":
+          return (Number(a.total || a.amount || 0) - Number(b.total || b.amount || 0)) * direction;
+        case "Created Time":
+        default:
+          return (toTime(a.createdAt) - toTime(b.createdAt)) * direction;
+      }
+    };
+
+    return [...recurringInvoices].sort(compare);
+  }, [recurringInvoices, selectedSidebarSortBy, sidebarSortOrder]);
+
+  const isRecurringBulkActive = selectedRecurringIds.length > 0;
+  const selectedRecurringInvoices = useMemo(
+    () => recurringInvoices.filter(ri => selectedRecurringIds.includes(String(ri.id))),
+    [recurringInvoices, selectedRecurringIds]
+  );
+
+  const clearRecurringSelection = () => {
+    setSelectedRecurringIds([]);
+    setIsBulkActionsOpen(false);
+  };
+
+  const refreshRecurringInvoicesList = async () => {
+    const allRecurringInvoices = await getRecurringInvoices();
+    setRecurringInvoices(Array.isArray(allRecurringInvoices) ? allRecurringInvoices : []);
+  };
+
+  const handleSidebarCreateNewRecurringInvoice = () => {
+    navigate("/sales/recurring-invoices/new");
+  };
+
+  const handleSidebarSortSelect = (sortOption: string) => {
+    if (selectedSidebarSortBy === sortOption) {
+      setSidebarSortOrder(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSelectedSidebarSortBy(sortOption);
+      setSidebarSortOrder("desc");
+    }
+    setIsSidebarSortDropdownOpen(false);
+  };
+
+  const handleChildInvoiceFilterSelect = (filter: string) => {
+    setChildInvoiceFilter(filter);
+    setIsChildInvoiceFilterOpen(false);
+  };
+
+  const handleSidebarExport = (exportType: string) => {
+    setIsSidebarExportDropdownOpen(false);
+    setIsSidebarMoreMenuOpen(false);
+
+    const invoicesToExport = sortedRecurringInvoices.length > 0 ? sortedRecurringInvoices : recurringInvoices;
+    if (!invoicesToExport.length) {
+      toast.error("No recurring invoices to export.");
+      return;
+    }
+
+    try {
+      if (exportType === "Export to PDF") {
+        exportToPDF(invoicesToExport);
+      } else if (exportType === "Export to Excel") {
+        exportToExcel(invoicesToExport);
+      } else if (exportType === "Export to CSV") {
+        exportToCSV(invoicesToExport);
+      }
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error(`Error exporting ${exportType.toLowerCase()}. Please try again.`);
+    }
+  };
+
+  const handleSidebarImport = () => {
+    setIsSidebarMoreMenuOpen(false);
+    setIsSidebarSortDropdownOpen(false);
+    setIsSidebarExportDropdownOpen(false);
+    navigate("/sales/recurring-invoices/import");
+  };
+
+  const handleSidebarPreferences = () => {
+    setIsSidebarMoreMenuOpen(false);
+    setIsSidebarSortDropdownOpen(false);
+    setIsSidebarExportDropdownOpen(false);
+    navigate("/settings/recurring-invoices");
+  };
+
+  const handleSidebarRefresh = () => {
+    void refreshRecurringInvoicesList();
+    setIsSidebarMoreMenuOpen(false);
+    setIsSidebarSortDropdownOpen(false);
+    setIsSidebarExportDropdownOpen(false);
+  };
+
+  const toggleRecurringSelected = (invoiceId: string) => {
+    setSelectedRecurringIds(prev =>
+      prev.includes(invoiceId)
+        ? prev.filter(id => id !== invoiceId)
+        : [...prev, invoiceId]
+    );
+  };
+
+  const toggleSelectAllRecurring = () => {
+    setSelectedRecurringIds(prev =>
+      prev.length === recurringInvoices.length
+        ? []
+        : recurringInvoices.map(ri => String(ri.id))
+    );
+  };
+
+  const handleRecurringBulkAction = async (action: "stop" | "resume" | "delete") => {
+    if (!selectedRecurringInvoices.length) return;
+
+    const count = selectedRecurringInvoices.length;
+    const actionLabel = action === "stop" ? "stop" : action === "resume" ? "resume" : "delete";
+    const confirmed = window.confirm(
+      action === "delete"
+        ? `Are you sure you want to delete ${count} selected recurring invoice${count > 1 ? "s" : ""}? This action cannot be undone.`
+        : `Are you sure you want to ${actionLabel} ${count} selected recurring invoice${count > 1 ? "s" : ""}?`
+    );
+    if (!confirmed) return;
+
+    try {
+      const currentId = String(id || "");
+      const selectedIds = [...selectedRecurringIds];
+
+      if (action === "delete") {
+        for (const invoiceId of selectedIds) {
+          await deleteRecurringInvoice(invoiceId);
+        }
+        clearRecurringSelection();
+        await refreshRecurringInvoicesList();
+        if (selectedIds.includes(currentId)) {
+          navigate("/sales/recurring-invoices");
+        }
+        toast.success(`${count} recurring invoice${count > 1 ? "s" : ""} deleted.`);
+        return;
+      }
+
+      const nextStatus = action === "stop" ? "stopped" : "active";
+      for (const invoiceId of selectedIds) {
+        await updateRecurringInvoice(invoiceId, { status: nextStatus } as any);
+      }
+
+      if (selectedIds.includes(currentId)) {
+        setRecurringInvoice(prev => prev ? { ...prev, status: nextStatus } : prev);
+      }
+
+      await refreshRecurringInvoicesList();
+      clearRecurringSelection();
+      toast.success(`${count} recurring invoice${count > 1 ? "s" : ""} ${action === "stop" ? "stopped" : "resumed"}.`);
+    } catch (error) {
+      console.error(`Error performing bulk recurring invoice ${action}:`, error);
+      toast.error(`Failed to ${actionLabel} selected recurring invoices.`);
+    }
+  };
 
   useEffect(() => {
+    clearRecurringSelection();
+
     const fetchData = async () => {
       try {
         const recurringInvoiceData = await getRecurringInvoiceById(String(id));
@@ -133,19 +438,34 @@ export default function RecurringInvoiceDetail() {
       if (moreMenuRef.current && target && !moreMenuRef.current.contains(target)) {
         setIsMoreMenuOpen(false);
       }
+      if (sidebarMoreMenuRef.current && target && !sidebarMoreMenuRef.current.contains(target)) {
+        setIsSidebarMoreMenuOpen(false);
+      }
+      if (sidebarSortDropdownRef.current && target && !sidebarSortDropdownRef.current.contains(target)) {
+        setIsSidebarSortDropdownOpen(false);
+      }
+      if (sidebarExportDropdownRef.current && target && !sidebarExportDropdownRef.current.contains(target)) {
+        setIsSidebarExportDropdownOpen(false);
+      }
       if (allRecurringInvoicesDropdownRef.current && target && !allRecurringInvoicesDropdownRef.current.contains(target)) {
         setIsAllRecurringInvoicesDropdownOpen(false);
       }
+      if (childInvoiceFilterRef.current && target && !childInvoiceFilterRef.current.contains(target)) {
+        setIsChildInvoiceFilterOpen(false);
+      }
+      if (bulkActionsRef.current && target && !bulkActionsRef.current.contains(target)) {
+        setIsBulkActionsOpen(false);
+      }
     };
 
-    if (isMoreMenuOpen || isAllRecurringInvoicesDropdownOpen) {
+    if (isMoreMenuOpen || isAllRecurringInvoicesDropdownOpen || isChildInvoiceFilterOpen || isBulkActionsOpen || isSidebarMoreMenuOpen || isSidebarSortDropdownOpen || isSidebarExportDropdownOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isMoreMenuOpen, isAllRecurringInvoicesDropdownOpen]);
+  }, [isMoreMenuOpen, isAllRecurringInvoicesDropdownOpen, isChildInvoiceFilterOpen, isBulkActionsOpen, isSidebarMoreMenuOpen, isSidebarSortDropdownOpen, isSidebarExportDropdownOpen]);
 
   const handleFilterSelect = (filter: string) => {
     setIsAllRecurringInvoicesDropdownOpen(false);
@@ -240,56 +560,226 @@ export default function RecurringInvoiceDetail() {
     <div className="w-full h-screen flex bg-white overflow-hidden">
       {/* Left Sidebar */}
       <div className="w-80 border-r border-gray-200 bg-white flex flex-col h-screen overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <div className="relative flex-1" ref={allRecurringInvoicesDropdownRef}>
-            <button
-              onClick={() => setIsAllRecurringInvoicesDropdownOpen(!isAllRecurringInvoicesDropdownOpen)}
-              className="w-full flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 cursor-pointer hover:bg-gray-50"
-            >
-              {isAllRecurringInvoicesDropdownOpen ? (
-                <ChevronUp size={16} className="text-gray-500" />
-              ) : (
-                <ChevronDown size={16} className="text-gray-500" />
-              )}
-              <span className="text-sm font-medium text-gray-700">All Recurring Inv...</span>
-            </button>
+        <div className="p-4 border-b border-gray-200">
+          {!isRecurringBulkActive ? (
+            <div className="flex items-center justify-between gap-3">
+              <div className="relative" ref={allRecurringInvoicesDropdownRef}>
+                <button
+                  onClick={() => setIsAllRecurringInvoicesDropdownOpen(!isAllRecurringInvoicesDropdownOpen)}
+                  className="flex items-center gap-1.5 py-4 cursor-pointer group border-b-2 border-[#156372] -mb-[1px] bg-transparent outline-none"
+                >
+                  <span className="text-sm font-bold text-slate-900 whitespace-nowrap">All Recurring Invoices</span>
+                  {isAllRecurringInvoicesDropdownOpen ? (
+                    <ChevronUp size={14} className="text-[#156372]" />
+                  ) : (
+                    <ChevronDown size={14} className="text-[#156372]" />
+                  )}
+                </button>
 
-            {/* Filter Dropdown */}
-            {isAllRecurringInvoicesDropdownOpen && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50">
-                {/* Search Bar */}
-                <div className="flex items-center gap-2 p-3 border-b border-gray-200">
-                  <Search size={16} className="text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search"
-                    value={filterSearch}
-                    onChange={(e) => setFilterSearch(e.target.value)}
-                    className="flex-1 outline-none text-sm text-gray-700"
-                    autoFocus
-                  />
-                </div>
-
-                {/* Filter Options */}
-                <div className="max-h-60 overflow-y-auto">
-                  {filteredStatusOptions.map((filter) => (
-                    <div
-                      key={filter}
-                      onClick={() => handleFilterSelect(filter)}
-                      className="flex items-center justify-between px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
-                    >
-                      <span>{filter}</span>
-                      <Star size={16} className="text-gray-400 hover:text-yellow-500 cursor-pointer" />
+                {/* Filter Dropdown */}
+                {isAllRecurringInvoicesDropdownOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                    {/* Search Bar */}
+                    <div className="flex items-center gap-2 p-3 border-b border-gray-200">
+                      <Search size={16} className="text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search"
+                        value={filterSearch}
+                        onChange={(e) => setFilterSearch(e.target.value)}
+                        className="flex-1 outline-none text-sm text-gray-700"
+                        autoFocus
+                      />
                     </div>
-                  ))}
-                </div>
 
+                    {/* Filter Options */}
+                    <div className="max-h-60 overflow-y-auto">
+                      {filteredStatusOptions.map((filter) => (
+                        <div
+                          key={filter}
+                          onClick={() => handleFilterSelect(filter)}
+                          className="flex items-center justify-between px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
+                        >
+                          <span>{filter}</span>
+                          <Star size={16} className="text-gray-400 hover:text-yellow-500 cursor-pointer" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSidebarCreateNewRecurringInvoice}
+                  className="w-10 h-10 flex items-center justify-center cursor-pointer transition-all bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white rounded-md hover:opacity-90 active:scale-95 shadow-md"
+                  title="New"
+                >
+                  <Plus size={18} strokeWidth={3} />
+                </button>
+                <div className="relative" ref={sidebarMoreMenuRef}>
+                  <button
+                    type="button"
+                    className="w-10 h-10 flex items-center justify-center bg-white border border-gray-300 text-gray-700 rounded-md cursor-pointer hover:bg-gray-50"
+                    onClick={() => setIsSidebarMoreMenuOpen(!isSidebarMoreMenuOpen)}
+                  >
+                    <MoreVertical size={18} className="text-gray-600" />
+                  </button>
+
+                  {isSidebarMoreMenuOpen && (
+                    <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[200px]">
+                      <div
+                        className={`flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 relative ${isSidebarSortDropdownOpen ? "bg-[#15637210] text-[#156372]" : ""}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsSidebarSortDropdownOpen(!isSidebarSortDropdownOpen);
+                          setIsSidebarExportDropdownOpen(false);
+                        }}
+                      >
+                        <ArrowUpDown size={16} className="text-gray-500" />
+                        <span>Sort by</span>
+                        <ChevronRightIcon size={16} className="text-gray-400 ml-auto" />
+                        {isSidebarSortDropdownOpen && (
+                          <div
+                            className="absolute right-full mr-3 top-0 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[180px]"
+                            ref={sidebarSortDropdownRef}
+                          >
+                            {sidebarSortOptions.map((option) => (
+                              <div
+                                key={option}
+                                className={`flex items-center justify-between px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 ${selectedSidebarSortBy === option ? "bg-[#15637210] text-[#156372]" : "text-gray-700"}`}
+                                onClick={() => handleSidebarSortSelect(option)}
+                              >
+                                <span>{option}</span>
+                                {selectedSidebarSortBy === option && (
+                                  <ChevronDown
+                                    size={16}
+                                    className={`text-[#156372] transition-transform ${sidebarSortOrder === "asc" ? "rotate-180" : ""}`}
+                                  />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="relative flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 group">
+                        <Download size={16} className="text-gray-500" />
+                        <span className="flex-1">Import</span>
+                        <ChevronRightIcon size={16} className="text-gray-400 group-hover:text-gray-600" />
+                        <div className="absolute top-0 right-full mr-1 min-w-[180px] bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-[99999] pointer-events-none opacity-0 translate-x-2 transition-all group-hover:pointer-events-auto group-hover:opacity-100 group-hover:translate-x-0">
+                          <div
+                            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
+                            onClick={handleSidebarImport}
+                          >
+                            <span>Import Recurring Invoices</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div
+                        className={`flex items-center gap-2 px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 relative ${isSidebarExportDropdownOpen ? "bg-[#15637210] text-[#156372]" : "text-gray-700"}`}
+                        onClick={() => {
+                          setIsSidebarExportDropdownOpen(!isSidebarExportDropdownOpen);
+                          setIsSidebarSortDropdownOpen(false);
+                        }}
+                      >
+                        <FileUp size={16} className="text-gray-500" />
+                        <span>Export</span>
+                        <ChevronRightIcon size={16} className="text-gray-400 ml-auto" />
+                      </div>
+                      <div className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50" onClick={handleSidebarPreferences}>
+                        <Settings size={16} className="text-gray-500" />
+                        <span>Preferences</span>
+                      </div>
+                      <div className={`flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 ${false ? "opacity-50 cursor-not-allowed" : ""}`} onClick={handleSidebarRefresh}>
+                        <RefreshCw size={16} className="text-[#156372] flex-shrink-0" />
+                        <span className="flex-1">Refresh List</span>
+                      </div>
+                    </div>
+                  )}
+                  {isSidebarExportDropdownOpen && (
+                    <div
+                      className="absolute top-[80px] right-0 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[150px]"
+                      ref={sidebarExportDropdownRef}
+                    >
+                      {["Export to PDF", "Export to Excel", "Export to CSV"].map((option) => (
+                        <div
+                          key={option}
+                          className="px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
+                          onClick={() => handleSidebarExport(option)}
+                        >
+                          {option}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-2 shadow-sm">
+              <label className="flex items-center justify-center">
+                <input
+                  type="checkbox"
+                  checked={recurringInvoices.length > 0 && selectedRecurringIds.length === recurringInvoices.length}
+                  onChange={toggleSelectAllRecurring}
+                  className="h-3.5 w-3.5 rounded border-gray-300 text-[#156372] focus:ring-[#156372]"
+                />
+              </label>
+
+              <div className="relative" ref={bulkActionsRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsBulkActionsOpen((open) => !open)}
+                  className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm font-medium leading-none text-gray-700 hover:bg-gray-50"
+                >
+                  <span className="whitespace-nowrap">Bulk Actions</span>
+                  <ChevronDown size={13} className="text-gray-500" />
+                </button>
+                {isBulkActionsOpen && (
+                  <div className="absolute left-0 top-full z-50 mt-2 min-w-[180px] overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg">
+                    {[
+                      { label: "Stop Selected", action: "stop" as const },
+                      { label: "Resume Selected", action: "resume" as const },
+                      { label: "Delete Selected", action: "delete" as const }
+                    ].map((item) => (
+                      <button
+                        key={item.label}
+                        type="button"
+                        onClick={() => {
+                          setIsBulkActionsOpen(false);
+                          void handleRecurringBulkAction(item.action);
+                        }}
+                        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        <span>{item.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#156372]/10 text-sm font-semibold text-[#156372]">
+                {selectedRecurringIds.length}
+              </span>
+              <span className="text-sm leading-none text-gray-700">Selected</span>
+
+              <button
+                type="button"
+                onClick={clearRecurringSelection}
+                className="ml-auto text-red-500 hover:text-red-600"
+                title="Clear selection"
+              >
+                <X size={17} />
+              </button>
+            </div>
+          )}
         </div>
         <div className="flex-1 overflow-y-auto">
-          {recurringInvoices.map((ri) => {
+          {sortedRecurringInvoices.map((ri) => {
+            const recurringId = String(ri.id);
+            const isSelected = selectedRecurringIds.includes(recurringId);
+            const isActiveRow = recurringId === String(id) || isSelected;
             const riNextDate = ri.nextInvoiceDate
               ? String(ri.nextInvoiceDate)
               : ri.startDate || ri.startOn
@@ -327,11 +817,18 @@ export default function RecurringInvoiceDetail() {
               <div
                 key={ri.id}
                 onClick={() => navigate(`/sales/recurring-invoices/${ri.id}`)}
-                className={`flex flex-col gap-2 p-4 cursor-pointer border-b border-gray-100 hover:bg-gray-50 ${ri.id === id ? "bg-blue-50 border-l-4 border-l-blue-600" : ""
+                className={`flex flex-col gap-2 p-4 cursor-pointer border-b border-gray-100 hover:bg-gray-50 ${isActiveRow ? "bg-[rgba(21,99,114,0.06)] border-l-4 border-l-[#156372]" : ""
                   }`}
               >
                 <div className="flex items-start gap-3">
-                  <Square size={16} className="text-gray-400 mt-1" />
+                  <label className="mt-1 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleRecurringSelected(recurringId)}
+                      className="h-4 w-4 rounded border-gray-300 text-[#156372] focus:ring-[#156372]"
+                    />
+                  </label>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-gray-900 truncate mb-1">
                       {ri.customerName || (typeof ri.customer === 'object' ? (ri.customer?.displayName || ri.customer?.name) : ri.customer) || "-"}
@@ -423,7 +920,7 @@ export default function RecurringInvoiceDetail() {
                 <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[150px] overflow-hidden">
                   <div
                     className={`px-4 py-2 text-sm cursor-pointer ${(recurringInvoice?.status || "active").toLowerCase() === "active"
-                      ? "bg-blue-600 text-white"
+                      ? "bg-[#156372] text-white"
                       : "text-gray-700 hover:bg-gray-50"
                       }`}
                     onClick={async () => {
@@ -554,7 +1051,7 @@ export default function RecurringInvoiceDetail() {
           <button
             onClick={() => setActiveTab("Overview")}
             className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "Overview"
-              ? "border-blue-600 text-blue-600"
+              ? "border-[#156372] text-[#156372]"
               : "border-transparent text-gray-600 hover:text-gray-900"
               }`}
           >
@@ -563,7 +1060,7 @@ export default function RecurringInvoiceDetail() {
           <button
             onClick={() => setActiveTab("Next Invoice")}
             className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "Next Invoice"
-              ? "border-blue-600 text-blue-600"
+              ? "border-[#156372] text-[#156372]"
               : "border-transparent text-gray-600 hover:text-gray-900"
               }`}
           >
@@ -572,7 +1069,7 @@ export default function RecurringInvoiceDetail() {
           <button
             onClick={() => setActiveTab("Recent Activities")}
             className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "Recent Activities"
-              ? "border-blue-600 text-blue-600"
+              ? "border-[#156372] text-[#156372]"
               : "border-transparent text-gray-600 hover:text-gray-900"
               }`}
           >
@@ -642,9 +1139,9 @@ export default function RecurringInvoiceDetail() {
                   </div>
 
                   {/* Info Box */}
-                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md flex items-start gap-2">
-                    <Info size={16} className="text-blue-600 mt-0.5 flex-shrink-0" />
-                    <p className="text-sm text-blue-800">
+                  <div className="mt-4 p-3 bg-[rgba(21,99,114,0.06)] border border-[rgba(21,99,114,0.18)] rounded-md flex items-start gap-2">
+                    <Info size={16} className="text-[#156372] mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-[#0D4A52]">
                       Recurring invoice preference:{" "}
                       <span className="font-medium">
                         {recurringInvoiceSettings?.invoiceMode === "sent"
@@ -656,41 +1153,21 @@ export default function RecurringInvoiceDetail() {
                 </div>
 
                 {/* ADDRESS Section */}
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase mb-3">ADDRESS</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <span className="text-sm font-medium text-gray-700">Billing Address</span>
-                      {customer && (customer.billingStreet1 || customer.billingCity) ? (
-                        <div className="mt-1 text-sm text-gray-600">
-                          {customer.billingStreet1 && <div>{customer.billingStreet1}</div>}
-                          {customer.billingStreet2 && <div>{customer.billingStreet2}</div>}
-                          {customer.billingCity && <div>{customer.billingCity}</div>}
-                          {customer.billingState && <div>{customer.billingState}</div>}
-                          {customer.billingZipCode && <div>{customer.billingZipCode}</div>}
-                          {customer.billingCountry && <div>{customer.billingCountry}</div>}
-                        </div>
-                      ) : (
-                        <div className="mt-1 text-sm text-gray-500 italic">No billing address</div>
-                      )}
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-700">Shipping Address</span>
-                      {customer && (customer.shippingStreet1 || customer.shippingCity) ? (
-                        <div className="mt-1 text-sm text-gray-600">
-                          {customer.shippingStreet1 && <div>{customer.shippingStreet1}</div>}
-                          {customer.shippingStreet2 && <div>{customer.shippingStreet2}</div>}
-                          {customer.shippingCity && <div>{customer.shippingCity}</div>}
-                          {customer.shippingState && <div>{customer.shippingState}</div>}
-                          {customer.shippingZipCode && <div>{customer.shippingZipCode}</div>}
-                          {customer.shippingCountry && <div>{customer.shippingCountry}</div>}
-                        </div>
-                      ) : (
-                        <div className="mt-1 text-sm text-gray-500 italic">No shipping address</div>
-                      )}
+                {hasAnyAddress && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 uppercase mb-3">ADDRESS</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <span className="text-sm font-medium text-gray-700">Billing Address</span>
+                        {renderAddress(selectedBillingAddress, "No billing address")}
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-gray-700">Shipping Address</span>
+                        {renderAddress(selectedShippingAddress, "No shipping address")}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* CUSTOMER NOTES Section */}
                 <div>
@@ -704,25 +1181,27 @@ export default function RecurringInvoiceDetail() {
               {/* Right Panel */}
               <div className="space-y-6">
                 {/* Summary Boxes */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <div className="text-xs text-gray-600 mb-1">Invoice Amount</div>
-                    <div className="text-lg font-semibold text-gray-900">
+                <div className="overflow-hidden border-b border-gray-200 bg-white">
+                  <div className="grid grid-cols-1 divide-y divide-gray-200 md:grid-cols-3 md:divide-y-0 md:divide-x">
+                  <div className="px-6 py-5 text-center">
+                    <div className="text-xs text-gray-600 mb-2">Invoice Amount</div>
+                    <div className="text-lg font-medium text-gray-900">
                       {formatCurrency(recurringInvoice.total || 0, recurringInvoice.currency || "USD")}
                     </div>
                   </div>
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <div className="text-xs text-gray-600 mb-1">Next Invoice Date</div>
-                    <div className="text-lg font-semibold text-blue-600">
+                  <div className="px-6 py-5 text-center">
+                    <div className="text-xs text-gray-600 mb-2">Next Invoice Date</div>
+                    <div className="text-lg font-medium text-[#156372]">
                       {nextInvoiceDate ? formatDate(nextInvoiceDate) : "—"}
                     </div>
                   </div>
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <div className="text-xs text-gray-600 mb-1">Recurring Period</div>
-                    <div className="text-lg font-semibold text-gray-900">
+                  <div className="px-6 py-5 text-center">
+                    <div className="text-xs text-gray-600 mb-2">Recurring Period</div>
+                    <div className="text-lg font-medium text-gray-900">
                       {recurringInvoice.repeatEvery || "Monthly"}
                     </div>
                   </div>
+                </div>
                 </div>
 
                 {/* Unpaid Invoices */}
@@ -732,22 +1211,53 @@ export default function RecurringInvoiceDetail() {
 
                 {/* All Child Invoices Section */}
                 <div className="border border-gray-200 rounded-lg">
-                  <div
-                    className="flex items-center justify-between p-4 border-b border-gray-200 cursor-pointer hover:bg-gray-50"
-                    onClick={() => setIsChildInvoicesExpanded(!isChildInvoicesExpanded)}
-                  >
-                    <h3 className="text-sm font-semibold text-gray-900">All Child Invoices</h3>
-                    {isChildInvoicesExpanded ? (
-                      <ChevronUp size={16} className="text-gray-600" />
-                    ) : (
-                      <ChevronDown size={16} className="text-gray-600" />
-                    )}
+                  <div className="flex items-center justify-between gap-3 p-4 border-b border-gray-200">
+                    <div ref={childInvoiceFilterRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsChildInvoiceFilterOpen((open) => !open);
+                        }}
+                        className="flex items-center gap-1 text-sm font-semibold text-gray-900 transition-colors hover:text-[#156372]"
+                      >
+                        <span>{childInvoiceFilter} Child Invoices</span>
+                        <ChevronDown size={16} className={`text-[#156372] transition-transform ${isChildInvoiceFilterOpen ? "rotate-180" : ""}`} />
+                      </button>
+                      {isChildInvoiceFilterOpen && (
+                        <div className="absolute left-0 top-full z-20 mt-2 w-48 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+                          {childInvoiceFilters.map((filter) => (
+                            <button
+                              key={filter}
+                              type="button"
+                              onClick={() => handleChildInvoiceFilterSelect(filter)}
+                              className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm transition-colors ${
+                                childInvoiceFilter === filter
+                                  ? "bg-[#156372] text-white"
+                                  : "text-gray-700 hover:bg-gray-50 hover:text-[#156372]"
+                              }`}
+                            >
+                              <span>{filter}</span>
+                              {childInvoiceFilter === filter ? <Check size={14} className="text-white" /> : null}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsChildInvoicesExpanded((open) => !open)}
+                      className="text-gray-600 hover:text-gray-900"
+                      aria-label={isChildInvoicesExpanded ? "Collapse child invoices" : "Expand child invoices"}
+                    >
+                      {isChildInvoicesExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </button>
                   </div>
 
                   {isChildInvoicesExpanded && (
                     <div className="p-4 space-y-3">
-                      {childInvoices.length > 0 ? (
-                        childInvoices.map((invoice) => (
+                      {filteredChildInvoices.length > 0 ? (
+                        filteredChildInvoices.map((invoice) => (
                           <div
                             key={invoice.id}
                             className="flex items-start justify-between p-3 border border-gray-200 rounded-md hover:bg-gray-50 cursor-pointer"
@@ -755,7 +1265,7 @@ export default function RecurringInvoiceDetail() {
                           >
                             <div className="flex-1">
                               {invoice.customerName || (typeof invoice.customer === 'object' ? (invoice.customer?.displayName || invoice.customer?.name) : (invoice.customer || recurringInvoice.customerName || (typeof recurringInvoice.customer === 'object' ? (recurringInvoice.customer?.displayName || recurringInvoice.customer?.name) : recurringInvoice.customer))) || "KOWNI"}
-                              <div className="text-sm text-blue-600 mb-1">
+                              <div className="text-sm text-[#156372] mb-1">
                                 {invoice.invoiceNumber || invoice.id}
                               </div>
                               <div className="text-xs text-gray-600 mb-1">
@@ -802,7 +1312,7 @@ export default function RecurringInvoiceDetail() {
                                       }
                                     });
                                   }}
-                                  className="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+                                  className="px-3 py-1 bg-[#156372] text-white text-xs rounded hover:bg-[#0D4A52]"
                                 >
                                   Record Payment
                                 </button>
@@ -875,7 +1385,7 @@ export default function RecurringInvoiceDetail() {
                 {/* Bill To Section */}
                 <div className="mb-6">
                   <div className="text-sm font-semibold text-gray-700 uppercase mb-2">Bill To</div>
-                  <div className="text-base font-medium text-blue-600">{recurringInvoice.customerName || (typeof recurringInvoice.customer === 'object' ? (recurringInvoice.customer?.displayName || recurringInvoice.customer?.name) : recurringInvoice.customer) || "KOWNI"}</div>
+                  <div className="text-base font-medium text-[#156372]">{recurringInvoice.customerName || (typeof recurringInvoice.customer === 'object' ? (recurringInvoice.customer?.displayName || recurringInvoice.customer?.name) : recurringInvoice.customer) || "KOWNI"}</div>
                 </div>
 
                 {/* Items Table */}
@@ -958,13 +1468,13 @@ export default function RecurringInvoiceDetail() {
             <div className="p-6">
               <div className="relative max-w-4xl">
                 {/* Timeline vertical line */}
-                <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-blue-600"></div>
+                <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-[#156372]"></div>
 
                 <div className="space-y-6">
                   {/* Recurring Invoice Created Activity */}
                   <div className="relative flex items-start gap-6">
                     {/* Timeline circle */}
-                    <div className="relative z-10 w-4 h-4 bg-blue-600 rounded-full border-2 border-white shadow-sm"></div>
+                    <div className="relative z-10 w-4 h-4 bg-[#156372] rounded-full border-2 border-white shadow-sm"></div>
 
                     {/* Activity Card */}
                     <div className="flex-1 bg-gray-50 rounded-lg border border-gray-200 p-4">
@@ -994,7 +1504,7 @@ export default function RecurringInvoiceDetail() {
                         return (
                           <div key={invoice.id} className="relative flex items-start gap-6">
                             {/* Timeline circle */}
-                            <div className="relative z-10 w-4 h-4 bg-blue-600 rounded-full border-2 border-white shadow-sm"></div>
+                            <div className="relative z-10 w-4 h-4 bg-[#156372] rounded-full border-2 border-white shadow-sm"></div>
 
                             {/* Activity Card */}
                             <div className="flex-1 bg-gray-50 rounded-lg border border-gray-200 p-4">
@@ -1011,7 +1521,7 @@ export default function RecurringInvoiceDetail() {
                               </div>
                               <button
                                 onClick={() => navigate(`/sales/invoices/${invoice.id}`)}
-                                className="text-sm text-blue-600 hover:text-blue-700 hover:underline"
+                                className="text-sm text-[#156372] hover:text-[#0D4A52] hover:underline"
                               >
                                 View the invoice
                               </button>
@@ -1023,7 +1533,7 @@ export default function RecurringInvoiceDetail() {
 
                   {childInvoices.length === 0 && (
                     <div className="relative flex items-start gap-6">
-                      <div className="relative z-10 w-4 h-4 bg-blue-600 rounded-full border-2 border-white shadow-sm"></div>
+                      <div className="relative z-10 w-4 h-4 bg-[#156372] rounded-full border-2 border-white shadow-sm"></div>
                       <div className="flex-1 text-center py-8 text-gray-500 text-sm">
                         No recent activities
                       </div>
@@ -1038,3 +1548,5 @@ export default function RecurringInvoiceDetail() {
     </div>
   );
 }
+
+

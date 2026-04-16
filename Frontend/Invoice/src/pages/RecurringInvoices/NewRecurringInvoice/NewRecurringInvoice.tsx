@@ -19,6 +19,8 @@ import {
   RefreshCw,
   Pencil,
   Grid3x3,
+  GripVertical,
+  Calculator,
   Zap,
   Link as LinkIcon,
   FileText,
@@ -66,6 +68,65 @@ const normalizePaymentTerm = (term?: string) => {
     default:
       return term || "Due on Receipt";
   }
+};
+
+type AddressBlock = {
+  attention?: string;
+  street1?: string;
+  street2?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  country?: string;
+  phone?: string;
+  fax?: string;
+};
+
+const resolveCustomerAddress = (customer: any, kind: "billing" | "shipping"): AddressBlock => {
+  const address = customer?.[`${kind}Address`] || {};
+  return {
+    attention: address.attention || customer?.[`${kind}Attention`] || "",
+    street1: address.street1 || customer?.[`${kind}Street1`] || "",
+    street2: address.street2 || customer?.[`${kind}Street2`] || "",
+    city: address.city || customer?.[`${kind}City`] || "",
+    state: address.state || customer?.[`${kind}State`] || "",
+    zipCode: address.zipCode || customer?.[`${kind}ZipCode`] || "",
+    country: address.country || customer?.[`${kind}Country`] || "",
+    phone: address.phone || customer?.[`${kind}Phone`] || "",
+    fax: address.fax || customer?.[`${kind}Fax`] || ""
+  };
+};
+
+const renderAddressBlock = (address: AddressBlock, emptyLabel: string) => {
+  const hasContent = Boolean(
+    address.attention ||
+    address.street1 ||
+    address.street2 ||
+    address.city ||
+    address.state ||
+    address.zipCode ||
+    address.country ||
+    address.phone ||
+    address.fax
+  );
+
+  if (!hasContent) {
+    return <div className="mt-1 text-sm text-gray-500 italic">{emptyLabel}</div>;
+  }
+
+  return (
+    <div className="mt-1 text-sm text-gray-600 leading-6">
+      {address.attention && <div className="font-medium text-gray-900">{address.attention}</div>}
+      {address.street1 && <div>{address.street1}</div>}
+      {address.street2 && <div>{address.street2}</div>}
+      {address.city && <div>{address.city}</div>}
+      {address.state && <div>{address.state}</div>}
+      {address.zipCode && <div>{address.zipCode}</div>}
+      {address.country && <div>{address.country}</div>}
+      {address.phone && <div>Phone: {address.phone}</div>}
+      {address.fax && <div>Fax: {address.fax}</div>}
+    </div>
+  );
 };
 
 export default function NewRecurringInvoice() {
@@ -1337,6 +1398,14 @@ export default function NewRecurringInvoice() {
     });
   };
 
+  const animatedFieldClass =
+    "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 transition-all duration-200 ease-out " +
+    "hover:-translate-y-0.5 hover:border-[#156372]/50 hover:shadow-[0_8px_24px_rgba(21,99,114,0.08)] " +
+    "focus:outline-none focus:ring-2 focus:ring-[#156372] focus:shadow-[0_10px_28px_rgba(21,99,114,0.12)] focus:-translate-y-0.5";
+
+  const animatedDropdownClass =
+    "absolute top-full left-0 right-0 mt-1 rounded-md border border-gray-200 bg-white shadow-lg transition-all duration-200 ease-out";
+
   const handleCustomerSelect = (customer: Customer) => {
     const paymentTermFromCustomer = (customer as any)?.paymentTerms || (customer as any)?.paymentTerm;
     const normalizedPaymentTerm = normalizePaymentTerm(paymentTermFromCustomer);
@@ -1561,6 +1630,40 @@ export default function NewRecurringInvoice() {
       .map((project) => getProjectLabel(project))
       .filter(Boolean);
   }, [customerProjects, selectedProjectIdSet]);
+
+  const selectedBillingAddress = React.useMemo(
+    () => (selectedCustomer ? resolveCustomerAddress(selectedCustomer, "billing") : null),
+    [selectedCustomer]
+  );
+  const selectedShippingAddress = React.useMemo(
+    () => (selectedCustomer ? resolveCustomerAddress(selectedCustomer, "shipping") : null),
+    [selectedCustomer]
+  );
+  const hasAnyCustomerAddress = Boolean(
+    selectedBillingAddress && (
+      selectedBillingAddress.attention ||
+      selectedBillingAddress.street1 ||
+      selectedBillingAddress.street2 ||
+      selectedBillingAddress.city ||
+      selectedBillingAddress.state ||
+      selectedBillingAddress.zipCode ||
+      selectedBillingAddress.country ||
+      selectedBillingAddress.phone ||
+      selectedBillingAddress.fax
+    )
+  ) || Boolean(
+    selectedShippingAddress && (
+      selectedShippingAddress.attention ||
+      selectedShippingAddress.street1 ||
+      selectedShippingAddress.street2 ||
+      selectedShippingAddress.city ||
+      selectedShippingAddress.state ||
+      selectedShippingAddress.zipCode ||
+      selectedShippingAddress.country ||
+      selectedShippingAddress.phone ||
+      selectedShippingAddress.fax
+    )
+  );
 
   const handleOpenProjectsModal = () => {
     if (customerProjects.length === 0) return;
@@ -2220,6 +2323,8 @@ export default function NewRecurringInvoice() {
         customer: customerId || undefined,
         customerId: customerId || undefined,
         customerName: getCustomerDisplayLabel(customer),
+        billingAddress: selectedCustomer?.billingAddress || undefined,
+        shippingAddress: selectedCustomer?.shippingAddress || undefined,
         orderNumber: formData.orderNumber,
         frequency: frequencyMapping[formData.repeatEvery] || "weekly",
         startDate: formData.startOn ? new Date(formData.startOn).toISOString() : new Date().toISOString(),
@@ -2368,7 +2473,7 @@ export default function NewRecurringInvoice() {
                   <div className="relative flex items-center">
                     <input
                       type="text"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#156372] pr-10"
+                      className={`${animatedFieldClass} pr-10`}
                       placeholder="Select or add a customer"
                       value={formData.customerName}
                       readOnly
@@ -2396,7 +2501,7 @@ export default function NewRecurringInvoice() {
                   </div>
 
                   {isCustomerDropdownOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                    <div className={`${animatedDropdownClass} z-50`}>
                       <div className="p-2 border-b border-gray-200 bg-gray-50 flex items-center gap-2">
                         <Search size={14} className="text-gray-400" />
                         <input
@@ -2448,6 +2553,25 @@ export default function NewRecurringInvoice() {
                 </div>
               </div>
             </div>
+
+            {selectedCustomer && hasAnyCustomerAddress && (
+              <div className="grid grid-cols-1 gap-8 rounded-xl border border-gray-200 bg-white/70 px-4 py-4 md:grid-cols-2">
+                <div>
+                  <div className="text-sm font-medium uppercase tracking-[0.18em] text-gray-500 flex items-center gap-1">
+                    Billing Address
+                    <Pencil size={12} className="text-gray-400" />
+                  </div>
+                  {renderAddressBlock(selectedBillingAddress!, "No billing address")}
+                </div>
+                <div>
+                  <div className="text-sm font-medium uppercase tracking-[0.18em] text-gray-500 flex items-center gap-1">
+                    Shipping Address
+                    <Pencil size={12} className="text-gray-400" />
+                  </div>
+                  {renderAddressBlock(selectedShippingAddress!, "No shipping address")}
+                </div>
+              </div>
+            )}
 
             {/* Associate Project Hours */}
             <div className="flex items-start gap-4">
@@ -2515,7 +2639,7 @@ export default function NewRecurringInvoice() {
                 <input
                   type="text"
                   name="profileName"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#156372]"
+                  className={animatedFieldClass}
                   value={formData.profileName}
                   onChange={handleChange}
                 />
@@ -2531,7 +2655,7 @@ export default function NewRecurringInvoice() {
                 <input
                   type="text"
                   name="orderNumber"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#156372]"
+                  className={animatedFieldClass}
                   value={formData.orderNumber}
                   onChange={handleChange}
                 />
@@ -2551,7 +2675,7 @@ export default function NewRecurringInvoice() {
                   <div className="relative flex items-center">
                     <input
                       type="text"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#156372] pr-10 cursor-pointer"
+                      className={`${animatedFieldClass} pr-10 cursor-pointer`}
                       value={formatFrequencyOption(formData.repeatEvery)}
                       readOnly
                       onClick={() => setIsRepeatEveryDropdownOpen(!isRepeatEveryDropdownOpen)}
@@ -2561,7 +2685,7 @@ export default function NewRecurringInvoice() {
                     </div>
                   </div>
                   {isRepeatEveryDropdownOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                    <div className={`${animatedDropdownClass} z-50`}>
                       <div className="max-h-60 overflow-y-auto">
                         {repeatEveryOptions.map((option) => (
                           <div
@@ -2594,13 +2718,13 @@ export default function NewRecurringInvoice() {
                   <div className="relative flex-1" ref={startDatePickerRef}>
                     <input
                       type="text"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#156372] cursor-pointer"
+                      className={`${animatedFieldClass} cursor-pointer`}
                       value={formData.startOn}
                       readOnly
                       onClick={() => setIsStartDatePickerOpen(!isStartDatePickerOpen)}
                     />
                     {isStartDatePickerOpen && (
-                      <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 p-4 w-72">
+                      <div className={`${animatedDropdownClass} z-50 p-4 w-72`}>
                         <div className="flex items-center justify-between mb-2">
                           <button onClick={() => navigateMonth("prev", "startOn")} className="p-1 hover:bg-gray-100 rounded">«</button>
                           <span className="text-sm font-semibold">{months[startDateCalendar.getMonth()]} {startDateCalendar.getFullYear()}</span>
@@ -2628,7 +2752,7 @@ export default function NewRecurringInvoice() {
                   <div className="relative w-32" ref={endDatePickerRef}>
                     <input
                       type="text"
-                      className={`w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#156372] cursor-pointer ${formData.neverExpires ? 'bg-gray-100 text-gray-400' : ''}`}
+                      className={`${animatedFieldClass} cursor-pointer ${formData.neverExpires ? 'bg-gray-100 text-gray-400' : ''}`}
                       value={formData.neverExpires ? "" : formData.endsOn}
                       readOnly
                       placeholder="dd/MM/yyyy"
@@ -2636,7 +2760,7 @@ export default function NewRecurringInvoice() {
                       onClick={() => !formData.neverExpires && setIsEndDatePickerOpen(!isEndDatePickerOpen)}
                     />
                     {isEndDatePickerOpen && !formData.neverExpires && (
-                      <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 p-4 w-72">
+                      <div className={`${animatedDropdownClass} z-50 p-4 w-72`}>
                         <div className="flex items-center justify-between mb-2">
                           <button onClick={() => navigateMonth("prev", "endsOn")} className="p-1 hover:bg-gray-100 rounded">«</button>
                           <span className="text-sm font-semibold">{months[endDateCalendar.getMonth()]} {endDateCalendar.getFullYear()}</span>
@@ -2683,7 +2807,7 @@ export default function NewRecurringInvoice() {
                   <div className="relative flex items-center">
                     <input
                       type="text"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#156372] pr-10 cursor-pointer"
+                      className={`${animatedFieldClass} pr-10 cursor-pointer`}
                       value={selectedPaymentTerm}
                       readOnly
                       onClick={togglePaymentTermsDropdown}
@@ -2693,7 +2817,7 @@ export default function NewRecurringInvoice() {
                     </div>
                   </div>
                   {isPaymentTermsDropdownOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                    <div className={`${animatedDropdownClass} z-50`}>
                       <div className="p-2 border-b border-gray-200 bg-gray-50 flex items-center gap-2">
                         <Search size={14} className="text-gray-400" />
                         <input
@@ -2775,7 +2899,7 @@ export default function NewRecurringInvoice() {
                 <div className="relative">
                   <textarea
                     name="subject"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#156372] resize-none"
+                    className={`${animatedFieldClass} resize-none`}
                     placeholder="Let your customer know what this Recurring Invoice is for"
                     value={formData.subject}
                     onChange={handleChange}
@@ -2793,7 +2917,7 @@ export default function NewRecurringInvoice() {
                 <div className="relative inline-block" ref={taxExclusiveDropdownRef}>
                   <button
                     type="button"
-                    className={`flex items-center gap-1.5 text-sm text-gray-600 font-medium transition-colors ${taxExclusiveOptions.length > 1 ? "hover:text-gray-900" : "opacity-70 cursor-not-allowed"}`}
+                    className={`flex items-center gap-1.5 text-sm text-gray-600 font-medium transition-all duration-200 ease-out ${taxExclusiveOptions.length > 1 ? "hover:-translate-y-0.5 hover:text-gray-900" : "opacity-70 cursor-not-allowed"}`}
                     onClick={() => {
                       if (taxExclusiveOptions.length > 1) {
                         setIsTaxExclusiveDropdownOpen(!isTaxExclusiveDropdownOpen);
@@ -2804,7 +2928,7 @@ export default function NewRecurringInvoice() {
                     {formData.taxExclusive}
                   </button>
                   {isTaxExclusiveDropdownOpen && (
-                    <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[200px]">
+                    <div className={`${animatedDropdownClass} z-50 min-w-[200px]`}>
                       <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase border-b border-gray-200">Item Tax Preference</div>
                       <div>
                         {taxExclusiveOptions.map((option, idx) => (
@@ -2835,14 +2959,14 @@ export default function NewRecurringInvoice() {
 
                 <div className="relative" ref={bulkActionsRef}>
                   <button
-                    className="flex items-center gap-1.5 text-sm text-[#156372] hover:text-[#0D4A52] font-medium transition-colors"
+                    className="flex items-center gap-1.5 text-sm text-[#156372] hover:text-[#0D4A52] font-medium transition-all duration-200 ease-out hover:-translate-y-0.5"
                     onClick={() => setIsBulkActionsOpen(!isBulkActionsOpen)}
                   >
                     <Check size={16} />
                     Bulk Actions
                   </button>
                   {isBulkActionsOpen && (
-                    <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[200px] overflow-hidden">
+                    <div className={`${animatedDropdownClass} z-50 min-w-[200px] overflow-hidden`}>
                       <div className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer" onClick={() => {
                         // Logic for "Insert New Header" via Bulk Actions?
                         // Or just toggle additional info.
@@ -2862,9 +2986,15 @@ export default function NewRecurringInvoice() {
                   <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-gray-200">
+                    <th className="w-8"></th>
                     <th className="text-left py-3 px-3 font-medium text-gray-700">ITEM DETAILS</th>
                     <th className="text-right py-3 px-3 font-medium text-gray-700 w-32">QUANTITY</th>
-                    <th className="text-right py-3 px-3 font-medium text-gray-700 w-32">RATE</th>
+                    <th className="text-right py-3 px-3 font-medium text-gray-700 w-32">
+                      <span className="inline-flex items-center justify-end gap-1.5">
+                        RATE
+                        <Calculator size={12} className="text-gray-500" />
+                      </span>
+                    </th>
                     <th className="text-left py-3 px-3 font-medium text-gray-700 w-48">TAX</th>
                     <th className="text-right py-3 px-3 font-medium text-gray-700 w-32">AMOUNT</th>
                     <th className="w-10"></th>
@@ -2875,13 +3005,18 @@ export default function NewRecurringInvoice() {
                     <React.Fragment key={item.id || index}>
                       {item.itemType === "header" ? (
                         <tr className="border-b border-gray-100 bg-gray-50/50 group">
+                          <td className="w-8 px-2 py-3">
+                            <div className="flex items-center justify-center text-gray-300">
+                              <GripVertical size={14} />
+                            </div>
+                          </td>
                           <td colSpan={5} className="py-3 px-3">
                             <input
                               type="text"
                               placeholder="Header Name"
                               value={item.itemDetails}
                               onChange={(e) => handleItemChange(item.id, 'itemDetails', e.target.value)}
-                              className="w-full bg-transparent border-0 border-b border-transparent focus:border-[#156372]500 outline-none text-sm font-bold text-gray-900 transition-colors"
+                                  className="w-full bg-transparent border-0 border-b border-transparent focus:border-[#156372] outline-none text-sm font-bold text-gray-900 transition-all duration-200 ease-out hover:-translate-y-0.5"
                             />
                           </td>
                           <td className="py-3 px-3">
@@ -2897,6 +3032,11 @@ export default function NewRecurringInvoice() {
                         </tr>
                       ) : (
                         <tr className={`border-b border-gray-100 group ${openItemMenuId === item.id ? "relative z-50" : ""}`}>
+                          <td className="w-8 px-2 py-2 align-top">
+                            <div className="flex items-start justify-center pt-2 text-gray-300">
+                              <GripVertical size={14} />
+                            </div>
+                          </td>
                           <td className="py-2 px-3">
                             <div
                               className="relative"
@@ -2905,6 +3045,9 @@ export default function NewRecurringInvoice() {
                               }}
                             >
                               <div className="flex items-center gap-2">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-gray-200 bg-gray-50 text-gray-300">
+                                  <ImageIcon size={16} />
+                                </div>
                                 <input
                                   type="text"
                                   placeholder="Type or click to select an item"
@@ -2916,7 +3059,7 @@ export default function NewRecurringInvoice() {
                                   }}
                                   onFocus={() => setOpenItemDropdowns(prev => ({ ...prev, [String(item.id)]: true }))}
                                   onClick={() => setOpenItemDropdowns(prev => ({ ...prev, [String(item.id)]: true }))}
-                                  className="w-full bg-transparent border-0 border-b border-transparent focus:border-[#156372]500 outline-none text-sm text-gray-900 transition-colors placeholder-gray-400"
+                                className="w-full bg-transparent border-0 border-b border-transparent focus:border-[#156372] outline-none text-sm text-gray-900 transition-all duration-200 ease-out hover:-translate-y-0.5 placeholder-gray-400"
                                 />
                               </div>
                               {item.itemSku ? (
@@ -2926,7 +3069,7 @@ export default function NewRecurringInvoice() {
                               ) : null}
 
                               {openItemDropdowns[String(item.id)] && (
-                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-[9999]">
+                                <div className={`${animatedDropdownClass} z-[9999]`}>
                                   {getFilteredItems(item.id).map(productItem => (
                                     <div
                                       key={productItem.id}
@@ -3003,7 +3146,7 @@ export default function NewRecurringInvoice() {
                                   <>
                                     <button
                                       type="button"
-                                      className="w-full px-2 py-1.5 border border-gray-300 bg-white rounded outline-none text-sm text-left flex items-center justify-between hover:border-gray-400 transition-colors"
+                                      className="w-full px-2 py-1.5 border border-gray-300 bg-white rounded-md outline-none text-sm text-left flex items-center justify-between transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[#156372]/50 hover:shadow-[0_8px_20px_rgba(21,99,114,0.08)] focus:ring-2 focus:ring-[#156372]"
                                       onClick={() => setOpenTaxDropdowns(prev => ({ ...prev, [String(item.id)]: !prev[String(item.id)] }))}
                                     >
                                       <span className={displayLabel === "Select a Tax" ? "text-gray-500" : "text-gray-900"}>
@@ -3017,9 +3160,9 @@ export default function NewRecurringInvoice() {
                                     </button>
 
                                     {openTaxDropdowns[String(item.id)] && (
-                                      <div className="absolute left-0 top-full z-[9999] mt-1 w-72 rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                                      <div className={`${animatedDropdownClass} left-0 top-full z-[9999] mt-1 w-72 p-1 shadow-2xl`}>
                                         <div className="p-2">
-                                          <div className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white" style={{ borderColor: "#156372" }}>
+                                          <div className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all duration-200 ease-out hover:bg-white focus-within:bg-white focus-within:shadow-[0_0_0_1px_#156372]" style={{ borderColor: "#156372" }}>
                                             <Search size={14} className="text-slate-400" />
                                             <input
                                               type="text"
@@ -3139,14 +3282,14 @@ export default function NewRecurringInvoice() {
 
             <div className="mt-4 flex items-center gap-3">
               <button
-                className="flex items-center gap-2 rounded-md border border-[#d7deef] bg-[#eef3ff] px-4 py-2 text-sm font-medium text-[#1f3f79] transition-colors hover:bg-[#e7eefb]"
+                className="flex items-center gap-2 rounded-md border border-[#d7deef] bg-[#eef3ff] px-4 py-2 text-sm font-medium text-[#1f3f79] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-[#e7eefb] hover:shadow-[0_8px_18px_rgba(31,63,121,0.08)]"
                 onClick={handleAddItem}
               >
                 <Plus size={16} />
                 Add New Row
               </button>
               <button
-                className="flex items-center gap-2 rounded-md border border-[#d7deef] bg-[#eef3ff] px-4 py-2 text-sm font-medium text-[#1f3f79] transition-colors hover:bg-[#e7eefb]"
+                className="flex items-center gap-2 rounded-md border border-[#d7deef] bg-[#eef3ff] px-4 py-2 text-sm font-medium text-[#1f3f79] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-[#e7eefb] hover:shadow-[0_8px_18px_rgba(31,63,121,0.08)]"
                 onClick={() => setIsBulkAddModalOpen(true)}
               >
                 <Plus size={16} />
@@ -3159,7 +3302,7 @@ export default function NewRecurringInvoice() {
               <label className="mb-2 block text-sm font-medium text-gray-900">Customer Notes</label>
               <textarea
                 name="customerNotes"
-                className="h-24 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-[#156372] focus:outline-none bg-white"
+                className={`${animatedFieldClass} h-24 w-full resize-y`}
                 value={formData.customerNotes}
                 onChange={handleChange}
               />
@@ -3266,7 +3409,7 @@ export default function NewRecurringInvoice() {
               <label className="block text-sm font-medium text-gray-900 mb-2">Terms & Conditions</label>
               <textarea
                 name="termsAndConditions"
-                className="w-full h-28 px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 focus:outline-none focus:border-[#156372] bg-white"
+                className={`${animatedFieldClass} h-28 w-full resize-y`}
                 placeholder="Enter the terms and conditions of your business to be displayed in your transaction"
                 value={formData.termsAndConditions}
                 onChange={handleChange}
