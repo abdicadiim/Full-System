@@ -322,9 +322,17 @@ export default function SalesReceiptDetail() {
     { account: salesAccount, debit: 0, credit: receipt?.subTotal || receipt?.total || 0 },
   ];
 
+  const receiptItems = Array.isArray(receipt?.items)
+    ? receipt.items
+    : Array.isArray((receipt as any)?.lineItems)
+      ? (receipt as any).lineItems
+      : Array.isArray((receipt as any)?.line_items)
+        ? (receipt as any).line_items
+        : [];
+
   // If items have cost, add Cost of Goods Sold entries
-  if (receipt?.items && receipt.items.length > 0) {
-    const totalCost = receipt.items.reduce((sum, item) => {
+  if (receiptItems.length > 0) {
+    const totalCost = receiptItems.reduce((sum, item) => {
       return sum + (parseFloat(item.cost || 0) * parseFloat(item.quantity || 0));
     }, 0);
 
@@ -625,11 +633,21 @@ ${sellerInfo.name}`
     if (!receipt) return;
 
     try {
+      toast.info("Creating a copy of this sales receipt...");
+      const extractNextNumber = (response: any) =>
+        String(
+          response?.data?.nextReceiptNumber ||
+          response?.data?.nextNumber ||
+          response?.data?.next_number ||
+          response?.data?.receiptNumber ||
+          response?.nextNumber ||
+          ""
+        ).trim();
       const numberResponse = await salesReceiptsAPI.getNextNumber();
-      const nextReceiptNumber = numberResponse?.data?.nextReceiptNumber;
+      let nextReceiptNumber = extractNextNumber(numberResponse);
 
-      const clonedItems = Array.isArray(receipt.items)
-        ? receipt.items.map((line: any) => ({
+      const clonedItems = Array.isArray(receiptItems)
+        ? receiptItems.map((line: any) => ({
           item: toEntityId(line?.item || line?.itemId) || undefined,
           name: line?.name || line?.itemDetails || line?.description || "Item",
           description: String(line?.description || ""),
@@ -679,17 +697,44 @@ ${sellerInfo.name}`
         createdBy: getCurrentUserLabel(),
       };
 
-      const clonedReceipt = await saveSalesReceipt(clonedPayload as any);
+      let clonedReceipt: any = null;
+      let lastError: any = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const payloadForAttempt =
+            attempt === 0
+              ? (clonedPayload as any)
+              : ({
+                  ...(clonedPayload as any),
+                  receiptNumber: extractNextNumber(await salesReceiptsAPI.getNextNumber())
+                } as any);
+
+          clonedReceipt = await saveSalesReceipt(payloadForAttempt);
+          if (clonedReceipt?.id || clonedReceipt?._id) break;
+        } catch (cloneError: any) {
+          lastError = cloneError;
+          const message = String(cloneError?.message || "").toLowerCase();
+          const isDuplicateNumber = /duplicate|already exists|e11000|receiptnumber/.test(message);
+          if (!isDuplicateNumber) {
+            throw cloneError;
+          }
+        }
+      }
+
+      if (!clonedReceipt?.id && !clonedReceipt?._id && lastError) {
+        throw lastError;
+      }
+
       const clonedReceiptId = clonedReceipt?.id || clonedReceipt?._id;
       if (clonedReceiptId) {
-        toast.success("Sales receipt cloned successfully.");
+        toast.success("Sales receipt copied successfully.");
         navigate(`/sales/sales-receipts/${clonedReceiptId}`);
         return;
       }
-      toast.success("Receipt cloned, but could not open it automatically.");
+      toast.error("Copy failed. Please try again.");
     } catch (error) {
       console.error("Error cloning sales receipt:", error);
-      toast.error("Failed to clone sales receipt. Please try again.");
+      toast.error("Failed to create copy. Please try again.");
     }
   };
 
@@ -704,9 +749,17 @@ ${sellerInfo.name}`
     if (!receipt) return;
 
     try {
-      await deleteSalesReceipt((receipt?.id || receipt?._id)!);
+      const receiptId = String(receipt?.id || receipt?._id || "").trim();
+      if (!receiptId) {
+        toast.error("Invalid sales receipt ID.");
+        return;
+      }
+      const response: any = await salesReceiptsAPI.delete(receiptId);
+      if (!response?.success) {
+        throw new Error(response?.message || "Failed to delete receipt.");
+      }
       setIsDeleteModalOpen(false);
-      navigate("/sales/sales-receipts");
+      navigate("/sales/sales-receipts", { replace: true });
       toast.success("Receipt deleted successfully!");
     } catch (error) {
       console.error("Error deleting receipt:", error);
@@ -994,6 +1047,7 @@ ${sellerInfo.name}`
             <span className="h-4 w-px bg-gray-300" />
             <div className="relative" ref={moreMenuRef}>
               <button
+                type="button"
                 className="h-7 w-8 rounded border border-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-50"
                 onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
                 title="More"
@@ -1003,29 +1057,49 @@ ${sellerInfo.name}`
               {isMoreMenuOpen && (
                 <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[220px] p-2">
                   <button
+                    type="button"
                     className="w-full text-left px-3 py-2 text-sm text-gray-800 rounded-md hover:bg-gray-50"
-                    onClick={handleClone}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      void handleClone();
+                    }}
                   >
                     Clone
                   </button>
                   {String(receipt.status || "").toLowerCase() !== "void" && (
                     <button
+                      type="button"
                       className="w-full text-left px-3 py-2 text-sm text-gray-800 rounded-md hover:bg-gray-50 mt-1"
-                      onClick={handleVoid}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void handleVoid();
+                      }}
                     >
                       Void
                     </button>
                   )}
                   <button
+                    type="button"
                     className="w-full text-left px-3 py-2 text-sm text-red-600 rounded-md hover:bg-red-50"
-                    onClick={handleDelete}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      void handleDelete();
+                    }}
                   >
                     Delete
                   </button>
                   <div className="my-1 h-px bg-gray-200" />
                   <button
+                    type="button"
                     className="w-full text-left px-3 py-2 text-sm text-gray-700 rounded-md hover:bg-gray-50 flex items-center gap-2"
-                    onClick={() => navigate("/settings/sales-receipts")}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      navigate("/settings/sales-receipts");
+                    }}
                   >
                     <Settings size={14} />
                     Sales Receipt Preferences
@@ -1119,8 +1193,8 @@ ${sellerInfo.name}`
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {receipt.items && receipt.items.length > 0 ? (
-                      receipt.items.map((item, index) => (
+                    {receiptItems.length > 0 ? (
+                      receiptItems.map((item, index) => (
                         <tr key={item.id || index}>
                           <td className="py-4 px-4 text-sm text-gray-600 align-top">{index + 1}</td>
                           <td className="py-4 px-4 align-top">

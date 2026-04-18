@@ -1476,11 +1476,11 @@ export const updateSalesReceipt = async (receiptId: string, receiptData: Partial
   }
 };
 
-export const deleteSalesReceipt = async (receiptId: string): Promise<SalesReceipt[]> => {
+export const deleteSalesReceipt = async (receiptId: string): Promise<boolean> => {
   try {
     const response = await salesReceiptsAPI.delete(receiptId);
     if (response && response.success) {
-      return await getSalesReceipts();
+      return true;
     }
     throw new Error('Failed to delete sales receipt');
   } catch (error) {

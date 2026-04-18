@@ -18,6 +18,7 @@ import { recordDeletion } from "../services/syncTombstoneService.js";
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const asString = (value: unknown) => String(typeof value === "string" ? value : "").trim();
+const toKey = (value: unknown) => asString(value).toLowerCase();
 const asNumber = (value: unknown) => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   const raw = String(value ?? "").trim();
@@ -94,9 +95,10 @@ const hasTransactionsForItem = async (orgId: string, item: any) => {
 
 const findDuplicateItemByName = async (orgId: string, name: string, excludeId?: string) => {
   if (!name) return null;
+  const nameKey = toKey(name);
   const filter: any = {
     organizationId: orgId,
-    name: new RegExp(`^${escapeRegExp(name)}$`, "i"),
+    nameKey,
   };
   if (excludeId && mongoose.isValidObjectId(excludeId)) {
     filter._id = { $ne: excludeId };
@@ -106,9 +108,10 @@ const findDuplicateItemByName = async (orgId: string, name: string, excludeId?: 
 
 const findDuplicateItemBySku = async (orgId: string, sku: string, excludeId?: string) => {
   if (!sku) return null;
+  const skuKey = toKey(sku);
   const filter: any = {
     organizationId: orgId,
-    sku: new RegExp(`^${escapeRegExp(sku)}$`, "i"),
+    skuKey,
   };
   if (excludeId && mongoose.isValidObjectId(excludeId)) {
     filter._id = { $ne: excludeId };
@@ -306,6 +309,8 @@ export const createItem: express.RequestHandler = async (req, res, next) => {
 
     const created = await Item.create({
       ...patch,
+      nameKey: toKey(patch.name),
+      skuKey: toKey(patch.sku),
       organizationId: orgId,
       createdBy: actor,
       updatedBy: actor,
@@ -381,7 +386,15 @@ export const updateItem: express.RequestHandler = async (req, res, next) => {
 
     const updated = await Item.findOneAndUpdate(
       { _id: itemId, organizationId: orgId },
-      { $set: { ...patch, updatedBy: actor }, $push: { history: historyEntry } },
+      {
+        $set: {
+          ...patch,
+          ...(Object.prototype.hasOwnProperty.call(patch, "name") ? { nameKey: toKey(patch.name) } : {}),
+          ...(Object.prototype.hasOwnProperty.call(patch, "sku") ? { skuKey: toKey(patch.sku) } : {}),
+          updatedBy: actor
+        },
+        $push: { history: historyEntry }
+      },
       { new: true }
     ).lean();
     if (!updated) return buildErrorResponse(res, 404, 2006, "Item does not exist");

@@ -2951,6 +2951,41 @@ export const billsAPI = {
 };
 
 const salesReceiptsBase = resource("/sales-receipts");
+const upsertSalesReceiptLocal = (row: any) => {
+  if (!row || typeof row !== "object") return;
+  const id = getEntityId(row);
+  if (!id) return;
+  const rows = ensureSeedRows(LOCAL_SALES_RECEIPTS_KEY, []);
+  const index = rows.findIndex((entry) => getEntityId(entry) === id);
+  const nextRow = { ...row, id, _id: row._id || row.id || id };
+  if (index >= 0) {
+    rows[index] = { ...rows[index], ...nextRow };
+  } else {
+    rows.unshift(nextRow);
+  }
+  writeLocalCollection(LOCAL_SALES_RECEIPTS_KEY, rows);
+};
+
+const replaceSalesReceiptsLocal = (incoming: any[]) => {
+  if (!Array.isArray(incoming)) return;
+  const normalized = incoming
+    .filter((row) => row && typeof row === "object")
+    .map((row) => {
+      const id = getEntityId(row);
+      return id ? { ...row, id, _id: row._id || row.id || id } : null;
+    })
+    .filter(Boolean) as any[];
+  writeLocalCollection(LOCAL_SALES_RECEIPTS_KEY, normalized);
+};
+
+const removeSalesReceiptLocal = (id: string) => {
+  const normalizedId = String(id || "").trim();
+  if (!normalizedId) return;
+  const rows = ensureSeedRows(LOCAL_SALES_RECEIPTS_KEY, []);
+  const next = rows.filter((row) => getEntityId(row) !== normalizedId);
+  writeLocalCollection(LOCAL_SALES_RECEIPTS_KEY, next);
+};
+
 export const salesReceiptsAPI = {
   ...salesReceiptsLocal,
   getAll: async (params?: any) => {
@@ -2959,20 +2994,44 @@ export const salesReceiptsAPI = {
     }
     try {
       const res = await salesReceiptsBase.getAll(params);
-      if (res?.success) return res as any;
+      if (res?.success) {
+        replaceSalesReceiptsLocal(Array.isArray(res?.data) ? res.data : []);
+        return res as any;
+      }
     } catch {}
     return salesReceiptsLocal.getAll(params);
   },
   getById: async (id: string) => {
     try {
       const res = await salesReceiptsBase.getById(id);
-      if (res?.success) return res as any;
+      if (res?.success) {
+        upsertSalesReceiptLocal(res.data);
+        return res as any;
+      }
     } catch {}
     return salesReceiptsLocal.getById(id);
   },
-  create: (data: any) => salesReceiptsBase.create(data),
-  update: (id: string, data: any) => salesReceiptsBase.update(id, data),
-  delete: (id: string) => salesReceiptsBase.delete(id),
+  create: async (data: any) => {
+    const res: any = await salesReceiptsBase.create(data);
+    if (res?.success && res?.data) {
+      upsertSalesReceiptLocal(res.data);
+    }
+    return res;
+  },
+  update: async (id: string, data: any) => {
+    const res: any = await salesReceiptsBase.update(id, data);
+    if (res?.success && res?.data) {
+      upsertSalesReceiptLocal(res.data);
+    }
+    return res;
+  },
+  delete: async (id: string) => {
+    const res: any = await salesReceiptsBase.delete(id);
+    if (res?.success) {
+      removeSalesReceiptLocal(id);
+    }
+    return res;
+  },
   getNextNumber: async () => {
     try {
       const txRes: any = await transactionNumberSeriesAPI.getNextNumber({ module: "Sales Receipt", reserve: false });

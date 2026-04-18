@@ -21,7 +21,6 @@ import {
   fetchItemsList,
   isItemDebugEnabled,
   itemQueryKeys,
-  readCachedItems,
   removeItemFromItemQueries,
   syncItemIntoItemQueries,
   useItemDetailQuery,
@@ -33,7 +32,7 @@ function ItemsPageContent() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [items, setItems] = useState<Item[]>(() => readCachedItems() as Item[]);
+  const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(() => {
@@ -127,24 +126,8 @@ function ItemsPageContent() {
     const normalizedItems = (Array.isArray(rows) ? rows : [])
       .map((item: Item) => normalizeItemForList(item))
       .filter(Boolean) as Item[];
-
-    setItems((prev) => {
-      if (normalizedItems.length === 0) {
-        return prev;
-      }
-
-      const merged = new Map<string, Item>();
-      [...prev, ...normalizedItems].forEach((item: any) => {
-        const normalizedId = String(item?.id || item?._id || "").trim();
-        if (!normalizedId) return;
-        merged.set(normalizedId, {
-          ...(merged.get(normalizedId) || {}),
-          ...item,
-        } as Item);
-      });
-
-      return Array.from(merged.values());
-    });
+    // Backend is the source of truth: replace list with remote rows.
+    setItems(normalizedItems);
   }, []);
 
   const mergeItemsForView = useCallback((primary: Item[], secondary?: any[]) => {
@@ -189,10 +172,7 @@ function ItemsPageContent() {
     enabled: shouldLoadItemsQuery,
   });
   const showItemDebugBadge = isItemDebugEnabled();
-  const visibleItems = useMemo(
-    () => mergeItemsForView(items, itemsListQuery.data as any[]),
-    [items, itemsListQuery.data, mergeItemsForView]
-  );
+  const visibleItems = useMemo(() => items, [items]);
 
   useEffect(() => {
     if (!permissionsLoading && !canViewItems) {
@@ -343,7 +323,7 @@ function ItemsPageContent() {
       }
       setClonedItem(null);
       toast.success("Item created successfully");
-      await fetchItems();
+      void fetchItems();
       return normalizedItem || newItem;
     } catch (error: any) {
       console.error("Failed to create item:", error);
@@ -410,7 +390,7 @@ function ItemsPageContent() {
       } else {
         syncItemIntoItemQueries(queryClient, { ...safeSelected, ...safeData, id: targetId, _id: targetId });
       }
-      await fetchItems();
+      void fetchItems();
       setSelectedId(targetId);
       setRouteState({ hash: "detail", itemId: targetId });
       toast.success("Item updated successfully");
@@ -442,7 +422,7 @@ function ItemsPageContent() {
       });
       ensureItemApiSuccess(await itemsAPI.delete(deleteConfirmModal.itemId), "Failed to delete item");
       removeItemInState(deleteConfirmModal.itemId);
-      await fetchItems();
+      void fetchItems();
       if (selectedId === deleteConfirmModal.itemId) {
         handleBackToList();
       }
@@ -469,7 +449,7 @@ function ItemsPageContent() {
         )
       );
       deleteConfirmModal.itemIds.forEach((id) => removeItemInState(id));
-      await fetchItems();
+      void fetchItems();
       if (deleteConfirmModal.itemIds.includes(selectedId || "")) {
         handleBackToList();
       }
@@ -497,7 +477,7 @@ function ItemsPageContent() {
           upsertItemInState({ ...existing, active: true, isActive: true, status: "Active" });
         }
       });
-      await fetchItems();
+      void fetchItems();
       toast.success(`${ids.length} item(s) marked as active`);
     } catch (e: any) { toast.error(e?.message || "Bulk action failed"); }
   };
@@ -517,7 +497,7 @@ function ItemsPageContent() {
           upsertItemInState({ ...existing, active: false, isActive: false, status: "Inactive" });
         }
       });
-      await fetchItems();
+      void fetchItems();
       toast.success(`${ids.length} item(s) marked as inactive`);
     } catch (e: any) { toast.error(e?.message || "Bulk action failed"); }
   };
@@ -540,7 +520,8 @@ function ItemsPageContent() {
           upsertItemInState({ ...existing, [field]: value });
         }
       });
-      await fetchItems();
+      void fetchItems();
+      setLoading(false);
       toast.success(`${bulkUpdateModal.itemIds.length} item(s) updated successfully`);
       setBulkUpdateModal({ open: false, itemIds: [] });
     } catch (e: any) {

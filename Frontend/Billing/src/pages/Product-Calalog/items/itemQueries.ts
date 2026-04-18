@@ -1,45 +1,18 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { itemsAPI } from "../../../services/api";
-import { CUSTOMER_QUERY_PERSIST_KEY } from "../../../lib/query/queryClient";
-import { readSyncEnvelope } from "../../../lib/sync/syncStorage";
 
 const ITEM_LIST_STALE_TIME_MS = 30 * 1000;
 const ITEM_DETAIL_STALE_TIME_MS = 30 * 1000;
-const ITEMS_SYNC_STORAGE_KEY = "billing_items_sync_v1";
-const ITEMS_LEGACY_STORAGE_KEY = "inv_items_v1";
-const ITEMS_PREVIEW_STORAGE_KEY = "inv_items_preview_v1";
 const ITEM_DEBUG_STORAGE_KEY = "billing_debug_items_v1";
 const ITEM_LIST_PAGE_SIZE = 200;
 
 const normalizeItemId = (value: any) => String(value ?? "").trim();
-const isMongoObjectIdLike = (value: any) => /^[a-f0-9]{24}$/i.test(normalizeItemId(value));
 
 const normalizeItemStatus = (item: any, isActive: boolean) => {
   const status = String(item?.status || "").trim();
   if (status) return status;
   return isActive ? "Active" : "Inactive";
-};
-
-const readPersistedQueryItems = () => {
-  if (typeof window === "undefined" || !window.localStorage) return [];
-
-  try {
-    const raw = window.localStorage.getItem(CUSTOMER_QUERY_PERSIST_KEY);
-    if (!raw) return [];
-
-    const persisted = JSON.parse(raw);
-    const queries = Array.isArray(persisted?.clientState?.queries) ? persisted.clientState.queries : [];
-    const matchedQuery = queries.find((query: any) => {
-      const queryKey = Array.isArray(query?.queryKey) ? query.queryKey : [];
-      return queryKey.length === 3 && queryKey[0] === "items" && queryKey[1] === "list" && queryKey[2] === "all";
-    });
-
-    const queryData = matchedQuery?.state?.data;
-    return Array.isArray(queryData) ? queryData : [];
-  } catch {
-    return [];
-  }
 };
 
 export const isItemDebugEnabled = () => {
@@ -227,59 +200,20 @@ const buildItemsListRequestParams = (page: number, pageSize: number) => ({
 });
 
 export const readCachedItems = () => {
-  if (typeof window === "undefined" || !window.localStorage) return [];
-
-  try {
-    const persistedItems = readPersistedQueryItems();
-    if (persistedItems.length > 0) {
-      return persistedItems;
-    }
-
-    const envelope = readSyncEnvelope<any[]>(ITEMS_SYNC_STORAGE_KEY);
-    const syncedRows = Array.isArray(envelope?.payload) ? envelope.payload : [];
-    if (syncedRows.length > 0) {
-      return syncedRows;
-    }
-
-    const legacyRaw = window.localStorage.getItem(ITEMS_LEGACY_STORAGE_KEY);
-    const legacyRows = legacyRaw ? JSON.parse(legacyRaw) : [];
-    if (Array.isArray(legacyRows) && legacyRows.length > 0) {
-      return legacyRows;
-    }
-
-    const raw = window.localStorage.getItem(ITEMS_PREVIEW_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  return [];
 };
 
 const writePreviewItems = (rows: any[]) => {
-  if (typeof window === "undefined" || !window.localStorage) return;
-  try {
-    const limited = Array.isArray(rows) ? rows.slice(0, ITEM_LIST_PAGE_SIZE) : [];
-    window.localStorage.setItem(ITEMS_PREVIEW_STORAGE_KEY, JSON.stringify(limited));
-  } catch {
-    // Best-effort preview cache; ignore storage quota issues.
-  }
+  // Database-only mode: do not persist items to localStorage.
+  void rows;
 };
 
 const mergeRemoteAndCachedItems = (remoteRows: any[], cachedRows?: any[]) => {
   const normalizedRemoteRows = (Array.isArray(remoteRows) ? remoteRows : [])
     .map((row: any) => normalizeItemForQueryCache(row))
     .filter(Boolean) as any[];
-  const normalizedCachedRows = (Array.isArray(cachedRows) ? cachedRows : readCachedItems())
-    .map((row: any) => normalizeItemForQueryCache(row))
-    .filter(Boolean) as any[];
-
-  const remoteIds = new Set(normalizedRemoteRows.map((row: any) => normalizeItemId(row?.id || row?._id)).filter(Boolean));
-  const localOnlyRows = normalizedCachedRows.filter((row: any) => {
-    const id = normalizeItemId(row?.id || row?._id);
-    return id && !isMongoObjectIdLike(id) && !remoteIds.has(id);
-  });
-
-  return [...normalizedRemoteRows, ...localOnlyRows];
+  void cachedRows;
+  return normalizedRemoteRows;
 };
 
 type FetchItemsListOptions = {
@@ -564,9 +498,7 @@ export const removeItemFromItemQueries = (queryClient: QueryClient, itemId: stri
 export const useItemsListQuery = (options?: { enabled?: boolean }) =>
   {
     const queryClient = useQueryClient();
-    const initialData =
-      queryClient.getQueryData<any[]>(itemQueryKeys.list()) ??
-      readCachedItems();
+    const initialData = queryClient.getQueryData<any[]>(itemQueryKeys.list());
 
     return useQuery({
       queryKey: itemQueryKeys.list(),

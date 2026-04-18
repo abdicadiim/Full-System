@@ -746,12 +746,18 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
         sku: form.sku.trim(),
       });
     } catch (error) {
+      const rawMessage =
+        (error as any)?.message ||
+        (error as any)?.response?.message ||
+        (error as any)?.data?.message ||
+        "";
+      const message = String(rawMessage || "").trim();
       debugItems("form submit failed", {
         name: form.name.trim(),
-        message: error instanceof Error ? error.message : String(error),
+        message: message || (error instanceof Error ? error.message : String(error)),
       });
       console.error("Failed to save item:", error);
-      toast.error("Failed to save item.");
+      toast.error(message || "Failed to save item.");
     } finally {
       setIsSaving(false);
     }

@@ -43,7 +43,7 @@ import PaymentModeDropdown from "../../../../components/PaymentModeDropdown";
 import { API_BASE_URL, getCurrentUser, getToken } from "../../../../services/auth";
 import NewTaxQuickModal from "../../../../components/tax/NewTaxQuickModal";
 import { buildTaxOptionGroups, taxLabel } from "../../../../hooks/Taxdropdownstyle";
-import { fetchItemsList, readCachedItems } from "../../../Product-Calalog/items/itemQueries";
+import { fetchItemsList } from "../../../Product-Calalog/items/itemQueries";
 
 // Salespersons will be loaded from database
 
@@ -204,6 +204,9 @@ const extractApiRows = (response) => {
     response,
     response?.data,
     response?.data?.data,
+    response?.data?.data?.items,
+    response?.data?.data?.rows,
+    response?.data?.data?.results,
     response?.data?.items,
     response?.data?.rows,
     response?.data?.results,
@@ -890,10 +893,6 @@ export default function NewSalesReceipt() {
           if (!Array.isArray(itemRows) || itemRows.length === 0) {
             itemRows = await fetchItemsList();
           }
-          if (!Array.isArray(itemRows) || itemRows.length === 0) {
-            itemRows = readCachedItems();
-          }
-
           catalogRows.push(
             ...itemRows
               .map((row: any, index: number) => normalizeCatalogEntry(row, "item", index))
@@ -1368,14 +1367,23 @@ export default function NewSalesReceipt() {
         try {
           const stateReceiptId = String(receiptFromState?.id || receiptFromState?._id || "").trim();
           const currentReceiptId = String(id || "").trim();
-          const receipt = stateReceiptId && stateReceiptId === currentReceiptId
-            ? receiptFromState
-            : await getSalesReceiptById(id);
+          let receipt = await getSalesReceiptById(id);
+          if (!receipt && stateReceiptId && stateReceiptId === currentReceiptId) {
+            // Fallback to navigation state if API detail temporarily fails.
+            receipt = receiptFromState;
+          }
           if (!receipt) return;
 
           const mappedItems = Array.isArray(receipt.items) && receipt.items.length > 0
             ? receipt.items.map((line, index) => {
-              const itemId = toEntityId(line?.item || line?.itemId);
+              const itemId = toEntityId(
+                line?.item ||
+                line?.itemId ||
+                line?.item_id ||
+                line?.product ||
+                line?.productId ||
+                line?.product_id
+              );
               const matchedItem = items?.find((itemRow) => String(itemRow?.id || itemRow?._id || "") === itemId);
               const quantity = toFiniteNumber(line?.quantity, 1) || 1;
               const rate = toFiniteNumber(line?.unitPrice ?? line?.rate ?? line?.price, 0);
@@ -1384,7 +1392,16 @@ export default function NewSalesReceipt() {
               return {
                 id: Date.now() + index + Math.floor(Math.random() * 1000),
                 itemId,
-                itemDetails: String(line?.name || line?.itemDetails || matchedItem?.name || line?.description || "").trim(),
+                itemDetails: String(
+                  line?.name ||
+                  line?.itemDetails ||
+                  line?.itemName ||
+                  line?.item?.name ||
+                  line?.product?.name ||
+                  matchedItem?.name ||
+                  line?.description ||
+                  ""
+                ).trim(),
                 quantity,
                 rate,
                 discount,
