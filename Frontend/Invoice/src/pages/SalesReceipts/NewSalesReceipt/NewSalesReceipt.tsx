@@ -32,7 +32,6 @@ import {
   MapPin,
   BriefcaseBusiness,
   Tag,
-  ClipboardList
 } from "lucide-react";
 import { saveSalesReceipt, getSalesReceiptById, updateSalesReceipt, getCustomers, getCustomersFromAPI } from "../../salesModel";
 import { salesReceiptsAPI, currenciesAPI, salespersonsAPI, itemsAPI, plansAPI, transactionNumberSeriesAPI, chartOfAccountsAPI, taxesAPI, paymentModesAPI, reportingTagsAPI } from "../../../services/api";
@@ -236,9 +235,22 @@ export default function NewSalesReceipt() {
   const [saveLoading, setSaveLoading] = useState(null);
   const [locationOptions, setLocationOptions] = useState(() => readStoredLocationOptions());
   const [availableReportingTags, setAvailableReportingTags] = useState([]);
-  const [catalogPriceLists, setCatalogPriceLists] = useState([]);
-  const [priceListSearch, setPriceListSearch] = useState("");
-  const [isPriceListDropdownOpen, setIsPriceListDropdownOpen] = useState(false);
+  const [isReceiptNumberPreferencesOpen, setIsReceiptNumberPreferencesOpen] = useState(false);
+  const [isSavingReceiptNumberPreferences, setIsSavingReceiptNumberPreferences] = useState(false);
+  const [receiptNumberMode, setReceiptNumberMode] = useState(() => {
+    try {
+      return localStorage.getItem("salesReceiptNumberMode") === "manual" ? "manual" : "auto";
+    } catch {
+      return "auto";
+    }
+  });
+  const [receiptNumberPreferencesMode, setReceiptNumberPreferencesMode] = useState("auto");
+  const [receiptNumberPreferencesSeriesId, setReceiptNumberPreferencesSeriesId] = useState("");
+  const [receiptNumberPreferencesSeriesName, setReceiptNumberPreferencesSeriesName] = useState("Default Transaction Series");
+  const [receiptNumberPreferencesPrefix, setReceiptNumberPreferencesPrefix] = useState("SR-");
+  const [receiptNumberPreferencesNextNumber, setReceiptNumberPreferencesNextNumber] = useState("00001");
+  const [receiptNumberPreferencesLocationIds, setReceiptNumberPreferencesLocationIds] = useState<string[]>([]);
+  const [receiptNumberPreferencesModules, setReceiptNumberPreferencesModules] = useState<any[]>([]);
 
   // Get item data from navigation state (when coming from item detail page)
   const itemFromState = location.state?.item || null;
@@ -250,8 +262,7 @@ export default function NewSalesReceipt() {
     receiptDate: formatDate(new Date()),
     selectedLocation: "Head Office",
     reportingTags: [],
-    selectedPriceList: "",
-    receiptNumber: "SR00001",
+    receiptNumber: "",
     salesperson: "",
     taxInclusive: "Tax Inclusive",
     items: [
@@ -289,67 +300,6 @@ export default function NewSalesReceipt() {
   const hasAppliedCloneRef = useRef(false);
   const hasLoadedEditDataRef = useRef(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
-
-  const loadCatalogPriceLists = () => {
-    try {
-      const raw = localStorage.getItem(PRICE_LISTS_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(parsed)) {
-        setCatalogPriceLists([]);
-        return;
-      }
-
-      const normalized = parsed
-        .map((row) => ({
-          id: String(row?.id || row?._id || row?.name || ""),
-          name: String(row?.name || "").trim(),
-          pricingScheme: String(row?.pricingScheme || "").trim(),
-          currency: String(row?.currency || "").trim(),
-          status: String(row?.status || "Active").trim(),
-          displayLabel: formatPriceListDisplayLabel(row),
-        }))
-        .filter((row) => row.name)
-        .filter((row) => row.status.toLowerCase() !== "inactive");
-
-      setCatalogPriceLists(normalized);
-    } catch (error) {
-      console.error("Error loading price lists for sales receipt:", error);
-      setCatalogPriceLists([]);
-    }
-  };
-
-  useEffect(() => {
-    loadCatalogPriceLists();
-
-    const handleStorageChange = (event) => {
-      if (!event.key || event.key === PRICE_LISTS_STORAGE_KEY) {
-        loadCatalogPriceLists();
-      }
-    };
-
-    const handleWindowFocus = () => loadCatalogPriceLists();
-
-    window.addEventListener("storage", handleStorageChange);
-    window.addEventListener("focus", handleWindowFocus);
-    return () => {
-      window.removeEventListener("storage", handleStorageChange);
-      window.removeEventListener("focus", handleWindowFocus);
-    };
-  }, []);
-
-  const selectedPriceListOption = catalogPriceLists.find((option) => option.name === formData.selectedPriceList);
-  const selectedPriceListDisplay =
-    selectedPriceListOption?.displayLabel || formData.selectedPriceList || "Select Price List";
-  const filteredPriceListOptions = catalogPriceLists.filter((option) => {
-    const search = priceListSearch.toLowerCase().trim();
-    if (!search) return true;
-    return (
-      option.name.toLowerCase().includes(search) ||
-      option.displayLabel.toLowerCase().includes(search) ||
-      option.pricingScheme.toLowerCase().includes(search) ||
-      option.currency.toLowerCase().includes(search)
-    );
-  });
 
   useEffect(() => {
     hasLoadedEditDataRef.current = false;
@@ -428,7 +378,7 @@ export default function NewSalesReceipt() {
   }, [clonedDataFromState, isEditMode]);
 
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
-  const [isCustomerInlineSearchMode, setIsCustomerInlineSearchMode] = useState(false);
+  const [isCustomerInlineSearchMode, setIsCustomerInlineSearchMode] = useState(true);
   const [isDiscountTypeDropdownOpen, setIsDiscountTypeDropdownOpen] = useState(false);
   const discountTypeDropdownRef = useRef(null);
   const [openDiscountDropdowns, setOpenDiscountDropdowns] = useState({});
@@ -487,6 +437,7 @@ export default function NewSalesReceipt() {
   const [bulkSelectedItems, setBulkSelectedItems] = useState([]);
   const [bulkSelectedItemIds, setBulkSelectedItemIds] = useState([]);
   const [isBulkActionsOpen, setIsBulkActionsOpen] = useState(false);
+  const [isAddRowMenuOpen, setIsAddRowMenuOpen] = useState(false);
   const [isBulkUpdateMode, setIsBulkUpdateMode] = useState(false);
   const [openItemMenuId, setOpenItemMenuId] = useState(null);
   const [isScanModeOpen, setIsScanModeOpen] = useState(false);
@@ -515,8 +466,8 @@ export default function NewSalesReceipt() {
   const taxDropdownRefs = useRef({});
   const fileInputRef = useRef(null);
   const uploadDropdownRef = useRef(null);
-  const priceListDropdownRef = useRef(null);
   const bulkActionsRef = useRef(null);
+  const addRowMenuRef = useRef(null);
   const itemMenuRefs = useRef({});
   const additionalInfoMenuRef = useRef(null);
   const additionalInfoReportingRef = useRef(null);
@@ -1206,9 +1157,6 @@ export default function NewSalesReceipt() {
         if (receiptDatePickerRef.current && !receiptDatePickerRef.current.contains(event.target)) {
           setIsReceiptDatePickerOpen(false);
         }
-        if (priceListDropdownRef.current && !priceListDropdownRef.current.contains(event.target)) {
-          setIsPriceListDropdownOpen(false);
-        }
         if (discountTypeDropdownRef.current && !discountTypeDropdownRef.current.contains(event.target)) {
         setIsDiscountTypeDropdownOpen(false);
       }
@@ -1246,6 +1194,10 @@ export default function NewSalesReceipt() {
         setIsBulkActionsOpen(false);
       }
 
+      if (addRowMenuRef.current && !addRowMenuRef.current.contains(event.target)) {
+        setIsAddRowMenuOpen(false);
+      }
+
       if (openItemMenuId !== null) {
         const ref = itemMenuRefs.current[openItemMenuId];
         if (ref && ref.current && !ref.current.contains(event.target)) {
@@ -1263,9 +1215,9 @@ export default function NewSalesReceipt() {
     };
 
       const hasOpenDropdown = isCustomerDropdownOpen || isSalespersonDropdownOpen || isLocationDropdownOpen ||
-        isTaxInclusiveDropdownOpen || isPaymentModeDropdownOpen || isDepositToDropdownOpen || isShippingChargeTaxDropdownOpen || isPriceListDropdownOpen ||
+        isTaxInclusiveDropdownOpen || isPaymentModeDropdownOpen || isDepositToDropdownOpen || isShippingChargeTaxDropdownOpen ||
         isReceiptDatePickerOpen || Object.values(openItemDropdowns).some(Boolean) || Object.values(openTaxDropdowns).some(Boolean) || Object.values(openReportingTagDropdowns).some(Boolean) ||
-      isDiscountTypeDropdownOpen || activeAccountDropdownItemId !== null || activeReportingDropdownItemId !== null;
+      isDiscountTypeDropdownOpen || activeAccountDropdownItemId !== null || activeReportingDropdownItemId !== null || isAddRowMenuOpen;
 
     if (hasOpenDropdown) {
       document.addEventListener("mousedown", handleClickOutside);
@@ -1274,7 +1226,7 @@ export default function NewSalesReceipt() {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-    }, [isCustomerDropdownOpen, isSalespersonDropdownOpen, isLocationDropdownOpen, isTaxInclusiveDropdownOpen, isPaymentModeDropdownOpen, isDepositToDropdownOpen, isShippingChargeTaxDropdownOpen, isPriceListDropdownOpen, isReceiptDatePickerOpen, openItemDropdowns, openTaxDropdowns, openReportingTagDropdowns, activeAccountDropdownItemId, activeReportingDropdownItemId]);
+    }, [isCustomerDropdownOpen, isSalespersonDropdownOpen, isLocationDropdownOpen, isTaxInclusiveDropdownOpen, isPaymentModeDropdownOpen, isDepositToDropdownOpen, isShippingChargeTaxDropdownOpen, isReceiptDatePickerOpen, openItemDropdowns, openTaxDropdowns, openReportingTagDropdowns, activeAccountDropdownItemId, activeReportingDropdownItemId, isAddRowMenuOpen]);
 
   // Set item from navigation state (when coming from item detail page)
   useEffect(() => {
@@ -1480,7 +1432,7 @@ export default function NewSalesReceipt() {
         } catch (error) {
           console.error("Error loading receipt data:", error);
         }
-      } else {
+      } else if (receiptNumberMode !== "manual") {
         // Fetch next receipt number for new receipt
         try {
           const response = await salesReceiptsAPI.getNextNumber();
@@ -1535,6 +1487,146 @@ export default function NewSalesReceipt() {
     setIsCustomerDropdownOpen(false);
     setCustomerSearch("");
     setIsCustomerInlineSearchMode(false);
+  };
+
+  const openCustomerDropdown = () => {
+    setIsCustomerInlineSearchMode(false);
+    setIsCustomerDropdownOpen(true);
+    setCustomerSearch(formData.customerName || "");
+  };
+
+  const resetCustomerField = () => {
+    setSelectedCustomer(null);
+    setFormData((prev) => ({ ...prev, customerName: "" }));
+    setCustomerSearch("");
+    setIsCustomerDropdownOpen(false);
+    setIsCustomerInlineSearchMode(true);
+  };
+
+  const openReceiptNumberPreferences = async () => {
+    const normalizeKey = (value: any) =>
+      String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+
+    const padNextNumber = (row: any) => {
+      const starting = String(row?.startingNumber || row?.nextNumber || "00001").trim() || "00001";
+      if (/^\d+$/.test(starting)) return starting;
+      const parsed = Number(row?.nextNumber);
+      const width = /^\d+$/.test(starting) ? starting.length : 5;
+      const current = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+      return String(current).padStart(width, "0");
+    };
+
+    try {
+      const response = await transactionNumberSeriesAPI.getAll();
+      const rows = Array.isArray(response?.data) ? response.data : [];
+      const salesReceiptRows = rows.filter((row: any) => {
+        const key = normalizeKey(row?.moduleKey || row?.module || row?.name || row?.seriesName);
+        return key === "sales_receipt" || key === "salesreceipt" || String(row?.module || "").toLowerCase().includes("sales receipt");
+      });
+      const preferredRow = salesReceiptRows[0] || null;
+      const seriesName = String(preferredRow?.seriesName || "Default Transaction Series").trim() || "Default Transaction Series";
+      const groupedRows = rows.filter((row: any) => String(row?.seriesName || "").trim().toLowerCase() === seriesName.toLowerCase());
+
+      setReceiptNumberPreferencesMode(receiptNumberMode);
+      setReceiptNumberPreferencesSeriesId(String(preferredRow?._id || preferredRow?.id || ""));
+      setReceiptNumberPreferencesSeriesName(seriesName);
+      setReceiptNumberPreferencesPrefix(String(preferredRow?.prefix || "SR-"));
+      setReceiptNumberPreferencesNextNumber(padNextNumber(preferredRow));
+      setReceiptNumberPreferencesLocationIds(
+        Array.isArray(preferredRow?.locationIds) ? preferredRow.locationIds.map((id: any) => String(id || "")).filter(Boolean) : []
+      );
+      setReceiptNumberPreferencesModules(
+        groupedRows.length > 0
+          ? groupedRows.map((row: any) => ({
+              ...row,
+              module: row?.module || "",
+              prefix: row?.prefix || "",
+              startingNumber: row?.startingNumber || "00001",
+              restartNumbering: row?.restartNumbering || "none",
+              isDefault: Boolean(row?.isDefault),
+            }))
+          : [{
+              module: "Sales Receipt",
+              prefix: "SR-",
+              startingNumber: "00001",
+              restartNumbering: "none",
+              isDefault: true,
+            }]
+      );
+      setIsReceiptNumberPreferencesOpen(true);
+    } catch (error) {
+      console.error("Error loading sales receipt number preferences:", error);
+      toast.error("Could not load receipt number preferences.");
+    }
+  };
+
+  const saveReceiptNumberPreferences = async () => {
+    if (receiptNumberPreferencesMode === "manual") {
+      try {
+        localStorage.setItem("salesReceiptNumberMode", "manual");
+      } catch {}
+      setReceiptNumberMode("manual");
+      setIsReceiptNumberPreferencesOpen(false);
+      return;
+    }
+
+    const normalizedPrefix = String(receiptNumberPreferencesPrefix || "").trim();
+    const normalizedNextNumber = String(receiptNumberPreferencesNextNumber || "").trim() || "00001";
+    const nextParsed = parseInt(normalizedNextNumber, 10);
+    const startingNumber = normalizedNextNumber;
+    const nextNumber = Number.isFinite(nextParsed) && nextParsed > 0 ? nextParsed : 1;
+    const displayReceiptNumber = `${normalizedPrefix || ""}${startingNumber}`.replace(/[^A-Za-z0-9]/g, "");
+    const updatedModules = (receiptNumberPreferencesModules.length > 0 ? receiptNumberPreferencesModules : [{
+      module: "Sales Receipt",
+      prefix: "SR-",
+      startingNumber: "00001",
+      restartNumbering: "none",
+      isDefault: true,
+    }]).map((module: any) => {
+      const isSalesReceipt = String(module?.module || "").toLowerCase().includes("sales receipt");
+      if (!isSalesReceipt) return module;
+      return {
+        ...module,
+        module: "Sales Receipt",
+        prefix: normalizedPrefix,
+        startingNumber,
+        nextNumber,
+        restartNumbering: String(module?.restartNumbering || "none").toLowerCase() || "none",
+        isDefault: true,
+      };
+    });
+
+    setIsSavingReceiptNumberPreferences(true);
+    setReceiptNumberMode("auto");
+    setFormData((prev) => ({
+      ...prev,
+      receiptNumber: displayReceiptNumber || prev.receiptNumber,
+    }));
+    try {
+      await transactionNumberSeriesAPI.updateMultiple({
+        seriesName: receiptNumberPreferencesSeriesName,
+        originalName: receiptNumberPreferencesSeriesName,
+        locationIds: receiptNumberPreferencesLocationIds,
+        modules: updatedModules,
+      });
+
+      try {
+        localStorage.setItem("salesReceiptNumberMode", "auto");
+      } catch {}
+
+      setIsReceiptNumberPreferencesOpen(false);
+
+      toast.success("Sales receipt numbering updated.");
+    } catch (error) {
+      console.error("Error saving sales receipt number preferences:", error);
+      toast.error("Failed to save receipt number preferences.");
+    } finally {
+      setIsSavingReceiptNumberPreferences(false);
+    }
   };
 
   const customerTaxAppliedRef = useRef<{
@@ -2366,7 +2458,7 @@ export default function NewSalesReceipt() {
 
   return (
 
-    <div className="w-full min-h-screen bg-[#f8fafc] flex flex-col">
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-[#f8fafc]">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -2381,75 +2473,50 @@ export default function NewSalesReceipt() {
         </button>
       </div>
 
-        <div className="flex-1 overflow-y-auto bg-white pb-72">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-white pb-72">
         <div className="w-full px-5 py-4">
-          <div className="w-full overflow-visible border border-[#e5e7eb] bg-white">
-            <div className="border-b border-[#eceef2] bg-[#f3f4f6] px-5 py-5">
+          <div className="w-full overflow-visible bg-transparent">
+            <div className="bg-transparent px-0 py-5">
               <div className="grid grid-cols-[140px_minmax(0,560px)] items-start gap-x-6 gap-y-5">
                 <label className="pt-3 text-[13px] font-medium text-[#374151]">Customer Name</label>
-                <div className="relative" ref={customerDropdownRef}>
-                  {isCustomerInlineSearchMode ? (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        className="h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-[#111827] outline-none transition-all placeholder:text-[#9ca3af] hover:border-[#156372] focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
-                        placeholder="Type the customer's name"
-                        value={formData.customerName}
-                        onChange={(e) => {
-                          setFormData(prev => ({ ...prev, customerName: e.target.value }));
-                          setCustomerSearch(e.target.value);
-                        }}
-                      />
+                <div className="flex items-start gap-2">
+                  <div className="relative flex-1 min-w-0" ref={customerDropdownRef}>
+                    {isCustomerInlineSearchMode ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          className="h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-[#111827] outline-none transition-all placeholder:text-[#9ca3af] hover:border-[#156372] focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
+                          placeholder="Type the customer's name"
+                          value={formData.customerName}
+                          onChange={(e) => {
+                            setFormData(prev => ({ ...prev, customerName: e.target.value }));
+                            setCustomerSearch(e.target.value);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="text-gray-500 transition-colors hover:text-[#156372]"
+                          onClick={openCustomerDropdown}
+                          title="Open customer list"
+                        >
+                          <Search size={15} />
+                        </button>
+                      </div>
+                    ) : (
                       <button
                         type="button"
-                        className="text-gray-500 transition-colors hover:text-[#156372]"
-                        onClick={() => setCustomerSearchModalOpen(true)}
-                        title="Advanced customer search"
-                      >
-                        <Search size={15} />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="h-9 flex-1 rounded-md border border-gray-300 bg-white px-3 text-left text-sm text-[#111827] flex items-center justify-between hover:border-[#156372]"
+                        className="h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-left text-sm text-[#111827] flex items-center justify-between hover:border-[#156372]"
                         onClick={() => {
                           setIsCustomerDropdownOpen((prev) => !prev);
-                          setCustomerSearch("");
+                          setCustomerSearch(formData.customerName || "");
                         }}
                       >
                         <span className={formData.customerName ? "text-[#111827]" : "text-gray-400"}>{formData.customerName || "Select Customer"}</span>
                         {isCustomerDropdownOpen ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
                       </button>
-                      <button
-                        type="button"
-                        className="text-[#94a3b8] transition-colors hover:text-[#64748b]"
-                        onClick={() => {
-                          setSelectedCustomer(null);
-                          setFormData((prev) => ({ ...prev, customerName: "" }));
-                          setCustomerSearch("");
-                          setIsCustomerDropdownOpen(false);
-                        }}
-                        title="Clear customer"
-                      >
-                        <X size={15} />
-                      </button>
-                      <button
-                        type="button"
-                        className="text-[#156372] transition-colors hover:text-[#0D4A52]"
-                        onClick={() => {
-                          setIsCustomerInlineSearchMode(true);
-                          setIsCustomerDropdownOpen(false);
-                        }}
-                        title="Search mode"
-                      >
-                        <Search size={15} />
-                      </button>
-                    </div>
-                  )}
-                  {isCustomerDropdownOpen && (
-                    <div className="absolute top-full left-0 z-50 mt-2 w-full overflow-hidden rounded-lg border border-[#dbe2ea] bg-white shadow-[0_18px_36px_rgba(15,23,42,0.12)]">
+                    )}
+                    {isCustomerDropdownOpen && (
+                      <div className="absolute top-full left-0 z-50 mt-2 w-full overflow-hidden rounded-lg border border-[#dbe2ea] bg-white shadow-[0_18px_36px_rgba(15,23,42,0.12)]">
                       <div className="border-b border-[#eef2f7] p-1.5">
                         <div className="relative">
                           <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
@@ -2509,8 +2576,19 @@ export default function NewSalesReceipt() {
                         <Plus size={14} />
                         New Customer
                       </button>
-                    </div>
-                  )}
+                      </div>
+                    )}
+                  </div>
+                  {!isCustomerInlineSearchMode ? (
+                    <button
+                      type="button"
+                      className="text-[#94a3b8] transition-colors hover:text-[#64748b]"
+                      onClick={resetCustomerField}
+                      title="Clear customer"
+                    >
+                      <X size={15} />
+                    </button>
+                  ) : null}
                 </div>
 
                 <label className="pt-2 text-[13px] font-medium text-[#ef4444]">Receipt Date*</label>
@@ -2563,10 +2641,10 @@ export default function NewSalesReceipt() {
               </div>
             </div>
 
-            <div className="border-b border-[#eceef2] bg-[#f8fafc] px-5 py-5">
+            <div className="bg-transparent px-0 py-5">
               <div className="grid grid-cols-[140px_minmax(0,560px)] items-start gap-x-6 gap-y-5">
                 <label className="pt-2 text-[13px] font-medium text-[#374151]">Location</label>
-                <div className="flex-1 max-w-xs relative" ref={locationDropdownRef}>
+                <div className="relative max-w-[262px] w-full" ref={locationDropdownRef}>
                   <button
                     type="button"
                     className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 flex justify-between items-center bg-white cursor-pointer focus:outline-none"
@@ -2606,19 +2684,25 @@ export default function NewSalesReceipt() {
                     type="text"
                     className="h-9 w-full rounded-md border border-[#cbd5e1] bg-white px-3 pr-10 text-sm text-[#111827] outline-none transition-all focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6]"
                     value={formData.receiptNumber}
+                    readOnly={receiptNumberMode !== "manual"}
                     onChange={(e) => setFormData(prev => ({ ...prev, receiptNumber: e.target.value }))}
                   />
-                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-[#bfdbfe] bg-[#eff6ff] p-0.5 text-[#2563eb]">
+                  <button
+                    type="button"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-[#bfdbfe] bg-[#eff6ff] p-0.5 text-[#2563eb] transition-colors hover:bg-[#dbeafe]"
+                    onClick={openReceiptNumberPreferences}
+                    title="Configure Sales Receipt# Preferences"
+                  >
                     <Settings size={12} />
-                  </div>
+                  </button>
                 </div>
               </div>
             </div>
 
-            <div className="border-b border-[#eceef2] bg-white px-5 py-5">
+            <div className="bg-transparent px-0 py-5">
               <div className="grid grid-cols-[140px_minmax(0,560px)] items-start gap-x-6 gap-y-5">
                 <label className="pt-2 text-[13px] font-medium text-[#374151]">Salesperson</label>
-                <div className="flex-1 max-w-xs relative" ref={salespersonDropdownRef}>
+                <div className="relative max-w-[262px] w-full" ref={salespersonDropdownRef}>
                   <div
                     className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 flex justify-between items-center bg-white cursor-pointer"
                     onClick={() => {
@@ -2772,80 +2856,13 @@ export default function NewSalesReceipt() {
             </div>
           </div>
 
-            <div className="mb-4 flex flex-wrap items-center gap-3 px-4">
-              <div className="relative" ref={priceListDropdownRef}>
-                <button
-                  type="button"
-                  className="flex h-9 min-w-[180px] items-center justify-between rounded border border-gray-300 bg-white px-3 text-[13px] text-gray-700 shadow-sm transition hover:border-[#156372] hover:bg-gray-50"
-                  onClick={() => {
-                    loadCatalogPriceLists();
-                    setIsPriceListDropdownOpen((prev) => !prev);
-                    setPriceListSearch("");
-                  }}
-                >
-                  <span className="flex items-center gap-2">
-                    <ClipboardList size={13} className="text-slate-400" />
-                    {selectedPriceListDisplay}
-                  </span>
-                  {isPriceListDropdownOpen ? (
-                    <ChevronUp size={13} className="text-[#2563eb]" />
-                  ) : (
-                    <ChevronDown size={13} className="text-slate-400" />
-                  )}
-                </button>
-
-                {isPriceListDropdownOpen && (
-                  <div className="absolute left-0 top-full z-[90] mt-2 w-[260px] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
-                    <div className="border-b border-gray-200 p-2">
-                      <div className="relative">
-                        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                        <input
-                          type="text"
-                          value={priceListSearch}
-                          onChange={(e) => setPriceListSearch(e.target.value)}
-                          placeholder="Search"
-                          className="h-9 w-full rounded border border-gray-300 bg-white pl-9 pr-3 text-[13px] text-gray-700 outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
-                        />
-                      </div>
-                    </div>
-                    <div className="max-h-[240px] overflow-y-auto py-1">
-                      {filteredPriceListOptions.length > 0 ? (
-                        filteredPriceListOptions.map((option) => {
-                          const isSelected = (formData.selectedPriceList || "") === option.name;
-                          return (
-                            <button
-                              key={option.id || option.name}
-                              type="button"
-                              className={`mx-2 flex w-[calc(100%-16px)] items-center justify-between rounded-md px-3 py-2 text-left text-[13px] ${
-                                isSelected ? "bg-[#156372] text-white" : "text-gray-700 hover:bg-gray-50"
-                              }`}
-                              onClick={() => {
-                                setFormData((prev) => ({ ...prev, selectedPriceList: option.name }));
-                                setIsPriceListDropdownOpen(false);
-                                setPriceListSearch("");
-                              }}
-                            >
-                              <span className="truncate">{option.displayLabel}</span>
-                              {isSelected ? <Check size={14} /> : null}
-                            </button>
-                          );
-                        })
-                      ) : (
-                        <div className="px-3 py-2 text-[13px] text-slate-500">No price lists found</div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
             <div className="mt-4 w-full max-w-[1120px] pr-12">
             {/* Item Table Header */}
-            <div className="mb-0 flex items-center justify-between rounded-t-md border border-b-0 border-[#e5e7eb] bg-[#f8fafc] px-4 py-3">
-              <h3 className="text-sm font-semibold text-gray-900">Item Table</h3>
-              <div className="flex items-center gap-3">
+            <div className="mb-0 flex items-center justify-between rounded-t-xl border border-b-0 border-[#dfe6ef] bg-gradient-to-b from-[#f9fbff] to-[#f3f7fb] px-5 py-4">
+              <h3 className="text-[15px] font-semibold text-[#111827]">Item Table</h3>
+              <div className="flex items-center gap-4">
                 <button
-                  className="flex items-center gap-1.5 text-[12px] font-medium text-[#2563eb] transition-colors hover:text-[#1d4ed8]"
+                  className="flex items-center gap-1.5 text-[13px] font-medium text-[#2563eb] transition-colors hover:text-[#1d4ed8]"
                   onClick={() => setIsScanModeOpen(true)}
                 >
                   <ScanLine size={14} />
@@ -2853,7 +2870,7 @@ export default function NewSalesReceipt() {
                 </button>
                 <div className="relative" ref={bulkActionsRef}>
                   <button
-                    className="flex items-center gap-1.5 text-[12px] font-medium text-[#2563eb] transition-colors hover:text-[#1d4ed8]"
+                    className="flex items-center gap-1.5 text-[13px] font-medium text-[#2563eb] transition-colors hover:text-[#1d4ed8]"
                     onClick={() => setIsBulkActionsOpen(!isBulkActionsOpen)}
                   >
                     <CheckSquare size={14} />
@@ -2990,9 +3007,20 @@ export default function NewSalesReceipt() {
               </div>
             )}
 
+            <div className="overflow-hidden rounded-b-xl border border-[#dfe6ef] border-t-0 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.04)]">
             <table className="w-full border-collapse text-sm">
+              <colgroup>
+                {isBulkUpdateMode && <col className="w-12" />}
+                <col className="w-[34%]" />
+                <col className="w-[12%]" />
+                <col className="w-[12%]" />
+                {showItemDiscount && <col className="w-[12%]" />}
+                <col className="w-[14%]" />
+                <col className="w-[12%]" />
+                <col className="w-12" />
+              </colgroup>
               <thead>
-                <tr className="border-b border-gray-200">
+                <tr className="border-b border-[#dfe6ef] bg-white">
                   {isBulkUpdateMode && (
                     <th className="w-12 py-3 px-3">
                       <input
@@ -3010,26 +3038,26 @@ export default function NewSalesReceipt() {
                       />
                     </th>
                   )}
-                  <th className="text-left py-3 px-3 font-medium text-gray-700">ITEM DETAILS</th>
-                  <th className="text-left py-3 px-3 font-medium text-gray-700">QUANTITY</th>
-                  <th className="text-center py-3 px-3 font-medium text-gray-700">
+                  <th className="border-r border-[#edf1f5] px-4 py-3 text-left text-[12px] font-bold uppercase tracking-[0.04em] text-[#334155]">ITEM DETAILS</th>
+                  <th className="border-r border-[#edf1f5] px-4 py-3 text-center text-[12px] font-bold uppercase tracking-[0.04em] text-[#334155]">QUANTITY</th>
+                  <th className="border-r border-[#edf1f5] px-4 py-3 text-center text-[12px] font-bold uppercase tracking-[0.04em] text-[#334155]">
                     <div className="flex items-center justify-center gap-1">
                       RATE
                       <Grid3x3 size={14} className="text-gray-400" />
                     </div>
                   </th>
                   {showItemDiscount && (
-                    <th className="text-left py-3 px-3 font-medium text-gray-700">DISCOUNT</th>
+                    <th className="border-r border-[#edf1f5] px-4 py-3 text-center text-[12px] font-bold uppercase tracking-[0.04em] text-[#334155]">DISCOUNT</th>
                   )}
-                  <th className="text-left py-3 px-3 font-medium text-gray-700">TAX</th>
-                  <th className="text-right py-3 px-3 font-medium text-gray-700">AMOUNT</th>
+                  <th className="border-r border-[#edf1f5] px-4 py-3 text-left text-[12px] font-bold uppercase tracking-[0.04em] text-[#334155]">TAX</th>
+                  <th className="px-4 py-3 text-right text-[12px] font-bold uppercase tracking-[0.04em] text-[#334155]">AMOUNT</th>
                   <th className="w-12"></th>
                 </tr>
               </thead>
               <tbody>
                 {formData.items.map((item) => (
                   <React.Fragment key={item.id}>
-                    <tr className="border-b border-gray-100">
+                    <tr className="border-b border-[#edf1f5] align-top">
                       {isBulkUpdateMode && (
                         <td className="py-3 px-3">
                           <input
@@ -3041,7 +3069,7 @@ export default function NewSalesReceipt() {
                           />
                         </td>
                       )}
-                      <td className="py-2 px-2">
+                      <td className="border-r border-[#edf1f5] px-4 py-3">
                         <div
                           className="relative"
                           ref={el => {
@@ -3053,13 +3081,13 @@ export default function NewSalesReceipt() {
                         >
                           {item.itemId ? (
                             <div className="space-y-3">
-                              <div className="flex items-start gap-2">
-                                <div className="mt-0.5 w-8 h-8 bg-gray-100 rounded flex items-center justify-center flex-shrink-0 border border-gray-200">
+                              <div className="flex items-start gap-3">
+                                <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[#dbe2ea] bg-[#f8fafc]">
                                   <ImageIcon size={16} className="text-gray-400" />
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                  <div className="text-sm text-gray-900 truncate">{item.itemDetails}</div>
-                                  <div className="text-xs text-slate-500 truncate">SKU: {item.sku || "-"}</div>
+                                  <div className="truncate text-sm font-medium text-[#1f2937]">{item.itemDetails}</div>
+                                  <div className="mt-0.5 truncate text-xs text-slate-500">SKU: {item.sku || "-"}</div>
                                 </div>
                                 <div className="flex items-center gap-1 text-gray-400 pt-0.5">
                                   <button
@@ -3090,12 +3118,12 @@ export default function NewSalesReceipt() {
                                 value={item.description || ""}
                                 onChange={(e) => handleItemChange(item.id, "description", e.target.value)}
                                 rows={2}
-                                className="w-full px-3 py-2 border border-gray-100 rounded-md text-sm text-gray-700 bg-[#f7f8fb] focus:outline-none focus:ring-1 focus:ring-[#2563eb] focus:border-[#2563eb] resize-none"
+                                className="w-full resize-none rounded-lg border border-[#dbe2ea] bg-[#f8fafc] px-3 py-2.5 text-sm text-gray-700 placeholder:text-[#9ca3af] focus:border-[#156372] focus:outline-none focus:ring-1 focus:ring-[#156372]"
                               />
                             </div>
                           ) : (
-                            <div className="flex items-center gap-2">
-                              <div className="w-6 h-6 bg-gray-200 rounded flex items-center justify-center flex-shrink-0">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-gray-100">
                                 <ImageIcon size={14} className="text-gray-400" />
                               </div>
                               <input
@@ -3108,7 +3136,7 @@ export default function NewSalesReceipt() {
                                   setOpenItemDropdowns(prev => ({ ...prev, [item.id]: true }));
                                 }}
                                 onFocus={() => setOpenItemDropdowns(prev => ({ ...prev, [item.id]: true }))}
-                                className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2563eb] focus:border-[#2563eb]"
+                                className="h-10 w-full rounded-lg border border-[#dbe2ea] bg-white px-3 text-sm text-gray-700 focus:border-[#156372] focus:outline-none focus:ring-1 focus:ring-[#156372]"
                               />
                             </div>
                           )}
@@ -3172,12 +3200,12 @@ export default function NewSalesReceipt() {
 
                         </div>
                       </td>
-                      <td className="p-3 align-top">
+                      <td className="border-r border-[#edf1f5] p-3 align-top">
                         <input
                           type="number"
                           value={item.quantity}
                           onChange={(e) => handleItemChange(item.id, "quantity", parseFloat(e.target.value) || 0)}
-                          className={`w-full px-3 py-2 text-sm text-gray-800 focus:outline-none ${item.itemId ? "border border-transparent bg-transparent text-center" : "border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-[#2563eb] focus:border-[#2563eb]"}`}
+                          className={`w-full px-3 py-2 text-sm text-gray-800 focus:outline-none ${item.itemId ? "border border-transparent bg-transparent text-center" : "rounded-lg border border-[#dbe2ea] focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"}`}
                           min="0"
                           step="0.01"
                         />
@@ -3202,12 +3230,12 @@ export default function NewSalesReceipt() {
                           </div>
                         ) : null}
                       </td>
-                      <td className="p-3 align-top">
+                      <td className="border-r border-[#edf1f5] p-3 align-top">
                         <input
                           type="number"
                           value={item.rate}
                           onChange={(e) => handleItemChange(item.id, "rate", parseFloat(e.target.value) || 0)}
-                          className={`w-full px-3 py-2 text-sm text-gray-700 focus:outline-none ${item.itemId ? "border border-transparent bg-transparent text-right" : "border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-[#2563eb] focus:border-[#2563eb]"}`}
+                          className={`w-full px-3 py-2 text-sm text-gray-700 focus:outline-none ${item.itemId ? "border border-transparent bg-transparent text-right" : "rounded-lg border border-[#dbe2ea] focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"}`}
                           min="0"
                           step="0.01"
                         />
@@ -3216,7 +3244,7 @@ export default function NewSalesReceipt() {
                         ) : null}
                       </td>
                       {showItemDiscount && (
-                      <td className="p-3">
+                      <td className="border-r border-[#edf1f5] p-3">
                         <div className="flex items-center border-2 border-gray-200 rounded-lg bg-white overflow-hidden focus-within:ring-2 focus-within:ring-[#2563eb] focus-within:border-[#2563eb] h-[38px]">
                           <input
                             type="number"
@@ -3263,7 +3291,7 @@ export default function NewSalesReceipt() {
                         </div>
                       </td>
                       )}
-                      <td className="p-3 relative overflow-visible">
+                      <td className="border-r border-[#edf1f5] p-3 relative overflow-visible">
                         <div className="relative" ref={el => taxDropdownRefs.current[item.id] = el}>
                           <button
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-left flex items-center justify-between bg-white shadow-sm transition hover:border-[#156372] hover:bg-gray-50 focus:outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
@@ -3405,9 +3433,9 @@ export default function NewSalesReceipt() {
                               <MoreVertical size={16} />
                             </button>
                             {openItemMenuId === item.id && (
-                              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[200px] overflow-hidden">
+                              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[220px] overflow-hidden">
                                 <button
-                                  className={`w-full flex items-center gap-2 px-4 py-2 text-sm transition-colors ${itemsWithAdditionalInfo.has(item.id)
+                                  className={`w-full flex items-center gap-2 whitespace-nowrap px-4 py-2 text-sm transition-colors ${itemsWithAdditionalInfo.has(item.id)
                                     ? "text-white"
                                     : "text-gray-700 hover:bg-gray-50"
                                     }`}
@@ -3429,7 +3457,7 @@ export default function NewSalesReceipt() {
                                   {itemsWithAdditionalInfo.has(item.id) ? "Hide Additional Information" : "Show Additional Information"}
                                 </button>
                                 <button
-                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors border-t border-gray-100"
+                                  className="w-full flex items-center gap-2 whitespace-nowrap px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors border-t border-gray-100"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleDuplicateItem(item.id);
@@ -3440,7 +3468,7 @@ export default function NewSalesReceipt() {
                                   Clone
                                 </button>
                                 <button
-                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors border-t border-gray-100"
+                                  className="w-full flex items-center gap-2 whitespace-nowrap px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors border-t border-gray-100"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const currentIndex = formData.items.findIndex(i => i.id === item.id);
@@ -3457,7 +3485,7 @@ export default function NewSalesReceipt() {
                                   Insert New Row
                                 </button>
                                 <button
-                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors border-t border-gray-100"
+                                  className="w-full flex items-center gap-2 whitespace-nowrap px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors border-t border-gray-100"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setIsBulkAddModalOpen(true);
@@ -3468,7 +3496,7 @@ export default function NewSalesReceipt() {
                                   Insert Items in Bulk
                                 </button>
                                 <button
-                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors border-t border-gray-100"
+                                  className="w-full flex items-center gap-2 whitespace-nowrap px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors border-t border-gray-100"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setShowNewHeaderInput(true);
@@ -3710,30 +3738,60 @@ export default function NewSalesReceipt() {
                 ))}
               </tbody>
             </table>
+            </div>
 
-            <div className="flex items-center gap-4 mt-4">
-              <button
-                className="px-4 py-2 rounded-md text-sm font-semibold transition-colors flex items-center gap-2"
-                style={{ backgroundColor: "rgba(21, 99, 114, 0.1)", color: "#2563eb" }}
-                onMouseEnter={(e) => e.target.style.backgroundColor = "rgba(21, 99, 114, 0.15)"}
-                onMouseLeave={(e) => e.target.style.backgroundColor = "rgba(21, 99, 114, 0.1)"}
-                onClick={handleAddItem}
-              >
-                <Plus size={16} />
-                Add New Row
-              </button>
+            <div className="mt-4 flex items-center gap-4">
+              <div className="relative" ref={addRowMenuRef}>
+                <button
+                  className="flex items-center gap-2 rounded-lg border border-[#d7e2ea] bg-[#eef6f7] px-4 py-2.5 text-sm font-semibold text-[#2563eb] transition-colors hover:bg-[#e6f1f3]"
+                  onClick={() => setIsAddRowMenuOpen((prev) => !prev)}
+                >
+                  <Plus size={16} />
+                  Add New Row
+                  <ChevronDown size={14} />
+                </button>
+                {isAddRowMenuOpen && (
+                  <div className="absolute left-0 top-full z-[120] mt-2 min-w-[220px] overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg">
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 whitespace-nowrap px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50"
+                      onClick={() => {
+                        handleAddItem();
+                        setIsAddRowMenuOpen(false);
+                      }}
+                    >
+                      <Plus size={14} className="text-gray-500" />
+                      Insert New Row
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 whitespace-nowrap border-t border-gray-100 px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50"
+                      onClick={() => {
+                        setIsBulkAddModalOpen(true);
+                        setIsAddRowMenuOpen(false);
+                      }}
+                    >
+                      <Plus size={14} className="text-gray-500" />
+                      Insert Items in Bulk
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 whitespace-nowrap border-t border-gray-100 px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50"
+                      onClick={() => {
+                        setShowNewHeaderInput(true);
+                        setNewHeaderItemId(null);
+                        setIsAddRowMenuOpen(false);
+                      }}
+                    >
+                      <Plus size={14} className="text-gray-500" />
+                      Insert New Header
+                    </button>
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => setIsBulkAddModalOpen(true)}
-                className="px-4 py-2 rounded-md text-sm font-semibold transition-colors flex items-center gap-2 border"
-                style={{ backgroundColor: "rgba(21, 99, 114, 0.1)", color: "#2563eb", borderColor: "#2563eb" }}
-                onMouseEnter={(e) => {
-                  e.target.style.backgroundColor = "rgba(21, 99, 114, 0.15)";
-                  e.target.style.borderColor = "#1d4ed8";
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
-                  e.target.style.borderColor = "#2563eb";
-                }}
+                className="flex items-center gap-2 rounded-lg border border-[#2563eb] bg-white px-4 py-2.5 text-sm font-semibold text-[#2563eb] transition-colors hover:bg-[#f8fbff]"
               >
                 <CheckSquare size={16} />
                 Add Items in Bulk
@@ -4185,6 +4243,107 @@ export default function NewSalesReceipt() {
           </div>
         </div>
       </div>
+
+      {/* Sales Receipt Number Preferences Modal */}
+      {isReceiptNumberPreferencesOpen && createPortal(
+        <div
+          className="fixed inset-0 z-[10000] flex items-start justify-center bg-black bg-opacity-45 px-4 py-10"
+          onClick={() => !isSavingReceiptNumberPreferences && setIsReceiptNumberPreferencesOpen(false)}
+        >
+          <div
+            className="w-full max-w-[540px] overflow-hidden rounded-lg bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+              <h2 className="text-[17px] font-medium text-gray-800">Configure Sales Receipt# Preferences</h2>
+              <button
+                type="button"
+                onClick={() => !isSavingReceiptNumberPreferences && setIsReceiptNumberPreferencesOpen(false)}
+                className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="px-5 py-4">
+              <p className="text-sm leading-6 text-gray-600">
+                {receiptNumberPreferencesMode === "manual"
+                  ? "You have selected manual sales receipt numbering. Do you want us to auto-generate it for you?"
+                  : "Your sales receipt numbers are set on auto-generate mode to save your time. Are you sure about changing this setting?"}
+              </p>
+
+              <div className="mt-4 space-y-3">
+                <label className="flex cursor-pointer items-start gap-2">
+                  <input
+                    type="radio"
+                    name="salesReceiptNumberMode"
+                    className="mt-1 h-4 w-4 accent-[#156372]"
+                    checked={receiptNumberPreferencesMode === "auto"}
+                    onChange={() => setReceiptNumberPreferencesMode("auto")}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm text-gray-800">
+                      Continue auto-generating sales receipt numbers <Info size={12} className="text-gray-400" />
+                    </div>
+                    {receiptNumberPreferencesMode === "auto" && (
+                      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <label className="block">
+                          <span className="mb-1 block text-[12px] text-gray-600">Prefix</span>
+                          <input
+                            type="text"
+                            value={receiptNumberPreferencesPrefix}
+                            onChange={(e) => setReceiptNumberPreferencesPrefix(e.target.value)}
+                            className="h-9 w-full rounded border border-gray-300 bg-white px-3 text-sm text-gray-700 outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="mb-1 block text-[12px] text-gray-600">Next Number</span>
+                          <input
+                            type="text"
+                            value={receiptNumberPreferencesNextNumber}
+                            onChange={(e) => setReceiptNumberPreferencesNextNumber(e.target.value)}
+                            className="h-9 w-full rounded border border-gray-300 bg-white px-3 text-sm text-gray-700 outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                </label>
+
+                <label className="flex cursor-pointer items-start gap-2">
+                  <input
+                    type="radio"
+                    name="salesReceiptNumberMode"
+                    className="mt-1 h-4 w-4 accent-[#156372]"
+                    checked={receiptNumberPreferencesMode === "manual"}
+                    onChange={() => setReceiptNumberPreferencesMode("manual")}
+                  />
+                  <div className="text-sm text-gray-800">Enter sales receipt numbers manually</div>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 border-t border-gray-200 px-5 py-4">
+              <button
+                type="button"
+                onClick={saveReceiptNumberPreferences}
+                disabled={isSavingReceiptNumberPreferences}
+                className={`rounded-md bg-[#156372] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#0D4A52] ${isSavingReceiptNumberPreferences ? "cursor-not-allowed opacity-70" : ""}`}
+              >
+                {isSavingReceiptNumberPreferences ? "Saving..." : "Save"}
+              </button>
+              <button
+                type="button"
+                onClick={() => !isSavingReceiptNumberPreferences && setIsReceiptNumberPreferencesOpen(false)}
+                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:border-[#156372] hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Manage Salespersons Modal */}
       {isManageSalespersonsModalOpen && createPortal(

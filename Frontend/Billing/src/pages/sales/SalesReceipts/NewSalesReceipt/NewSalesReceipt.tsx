@@ -43,6 +43,7 @@ import PaymentModeDropdown from "../../../../components/PaymentModeDropdown";
 import { API_BASE_URL, getCurrentUser, getToken } from "../../../../services/auth";
 import NewTaxQuickModal from "../../../../components/tax/NewTaxQuickModal";
 import { buildTaxOptionGroups, taxLabel } from "../../../../hooks/Taxdropdownstyle";
+import { fetchItemsList, readCachedItems } from "../../../Product-Calalog/items/itemQueries";
 
 // Salespersons will be loaded from database
 
@@ -181,9 +182,22 @@ const normalizeCatalogEntry = (row, fallbackType = "item", index = 0) => {
 };
 
 const extractApiRows = (response) => {
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response?.data)) return response.data;
-  if (Array.isArray(response?.data?.data)) return response.data.data;
+  const candidates = [
+    response,
+    response?.data,
+    response?.data?.data,
+    response?.data?.items,
+    response?.data?.rows,
+    response?.data?.results,
+    response?.items,
+    response?.rows,
+    response?.results,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate;
+  }
+
   return [];
 };
 
@@ -505,6 +519,7 @@ export default function NewSalesReceipt() {
   const shippingChargeTaxDropdownRef = useRef(null);
   const receiptDatePickerRef = useRef(null);
   const itemDropdownRefs = useRef({});
+  const itemDropdownPortalRefs = useRef({});
   const taxDropdownRefs = useRef({});
   const fileInputRef = useRef(null);
   const uploadDropdownRef = useRef(null);
@@ -845,13 +860,27 @@ export default function NewSalesReceipt() {
         const catalogRows: any[] = [];
 
         try {
-          const itemsResponse = await itemsAPI.getAll();
-          const itemRows = extractApiRows(itemsResponse);
-        catalogRows.push(
-          ...itemRows
-            .map((row: any, index: number) => normalizeCatalogEntry(row, "item", index))
-            .filter((row: any) => row && String(row.status || "active").toLowerCase() !== "inactive")
-        );
+          let itemRows: any[] = [];
+
+          try {
+            const directItemsResponse = await itemsAPI.getAll({ limit: 1000, per_page: 1000, page: 1 });
+            itemRows = extractApiRows(directItemsResponse);
+          } catch (directError) {
+            console.error("Direct database item load failed for sales receipt:", directError);
+          }
+
+          if (!Array.isArray(itemRows) || itemRows.length === 0) {
+            itemRows = await fetchItemsList();
+          }
+          if (!Array.isArray(itemRows) || itemRows.length === 0) {
+            itemRows = readCachedItems();
+          }
+
+          catalogRows.push(
+            ...itemRows
+              .map((row: any, index: number) => normalizeCatalogEntry(row, "item", index))
+              .filter((row: any) => row && String(row.status || "active").toLowerCase() !== "inactive")
+          );
         } catch (error) {
           console.error("Error loading items for sales receipt:", error);
         }
@@ -1167,7 +1196,12 @@ export default function NewSalesReceipt() {
       Object.keys(openItemDropdowns).forEach(itemId => {
         if (openItemDropdowns[itemId]) {
           const ref = itemDropdownRefs.current[itemId];
-          if (ref && ref.current && !ref.current.contains(event.target)) {
+          const portalRef = itemDropdownPortalRefs.current[itemId];
+          const anchorElement = ref?.current || ref;
+          const portalElement = portalRef?.current || portalRef;
+          const clickedInsideAnchor = anchorElement && typeof anchorElement.contains === "function" && anchorElement.contains(event.target);
+          const clickedInsidePortal = portalElement && typeof portalElement.contains === "function" && portalElement.contains(event.target);
+          if (!clickedInsideAnchor && !clickedInsidePortal) {
             setOpenItemDropdowns(prev => ({ ...prev, [itemId]: false }));
           }
         }
@@ -1324,7 +1358,7 @@ export default function NewSalesReceipt() {
           const mappedItems = Array.isArray(receipt.items) && receipt.items.length > 0
             ? receipt.items.map((line, index) => {
               const itemId = toEntityId(line?.item || line?.itemId);
-              const matchedItem = items.find((itemRow) => String(itemRow.id || itemRow._id || "") === itemId);
+              const matchedItem = items?.find((itemRow) => String(itemRow?.id || itemRow?._id || "") === itemId);
               const quantity = toFiniteNumber(line?.quantity, 1) || 1;
               const rate = toFiniteNumber(line?.unitPrice ?? line?.rate ?? line?.price, 0);
               const discount = toFiniteNumber(line?.discount, 0);
@@ -1343,12 +1377,12 @@ export default function NewSalesReceipt() {
                 description: line?.description || ""
               };
             })
-            : [
+            : prev.items && prev.items.length > 0 ? prev.items : [
               { id: 1, itemDetails: "", quantity: 1, rate: 0, discount: 0, discountType: "percent", tax: "", amount: 0 }
             ];
 
-          const customerObject = typeof receipt.customer === "object" ? receipt.customer : null;
-          const customerId = String(receipt.customerId || customerObject?._id || customerObject?.id || receipt.customer || "").trim();
+          const customerObject = typeof receipt.customer === "object" && receipt.customer !== null ? receipt.customer : null;
+          const customerId = String(receipt.customerId || customerObject?._id || customerObject?.id || (typeof receipt.customer === "string" ? receipt.customer : "") || "").trim();
           const customerName = String(
             receipt.customerName ||
             customerObject?.displayName ||
@@ -1359,55 +1393,55 @@ export default function NewSalesReceipt() {
           const fallbackCustomerLabel = typeof receipt.customer === "string" ? receipt.customer : "";
           const normalizedCustomerLabel = (customerName || fallbackCustomerLabel || "").trim();
 
-          const matchedCustomer = customers.find((customer) => {
-            const idMatch = customerId && String(customer.id || customer._id || "") === customerId;
-            const nameMatch = customerName && String(customer.name || "").trim().toLowerCase() === customerName.toLowerCase();
+          const matchedCustomer = customers?.find((customer) => {
+            const idMatch = customerId && String(customer?.id || customer?._id || "") === customerId;
+            const nameMatch = customerName && String(customer?.name || "").trim().toLowerCase() === customerName.toLowerCase();
             return idMatch || nameMatch;
           });
 
           const salespersonName = String(
-            typeof receipt.salesperson === "object"
+            typeof receipt.salesperson === "object" && receipt.salesperson !== null
               ? (receipt.salesperson?.name || receipt.salesperson?.displayName || "")
               : (receipt.salesperson || "")
           ).trim();
-          const matchedSalesperson = salespersons.find((sp) =>
-            String(sp.name || "").trim().toLowerCase() === salespersonName.toLowerCase()
+          const matchedSalesperson = salespersons?.find((sp) =>
+            String(sp?.name || "").trim().toLowerCase() === salespersonName.toLowerCase()
           );
 
           const depositAccountId = toEntityId(receipt.depositToAccount || receipt.depositToAccountId);
-          const matchedDepositAccount = depositAccounts.find((account) => {
-            const accountId = String(account.id || account._id || "");
-            const accountName = String(account.accountName || account.name || "").trim().toLowerCase();
+          const matchedDepositAccount = depositAccounts?.find((account) => {
+            const accountId = String(account?.id || account?._id || "");
+            const accountName = String(account?.accountName || account?.name || "").trim().toLowerCase();
             const depositName = String(receipt.depositTo || "").trim().toLowerCase();
             return (depositAccountId && accountId === depositAccountId) || (depositName && accountName === depositName);
           });
 
-          setFormData((prev) => ({
-            ...prev,
-            customerName: matchedCustomer?.name || normalizedCustomerLabel || prev.customerName,
-            receiptDate: receipt.date ? formatDate(receipt.date) : (receipt.receiptDate ? formatDate(receipt.receiptDate) : prev.receiptDate),
-            selectedLocation: receipt.selectedLocation || receipt.location || prev.selectedLocation,
-            reportingTags: Array.isArray(receipt.reportingTags) ? receipt.reportingTags : prev.reportingTags,
-            receiptNumber: receipt.receiptNumber || prev.receiptNumber,
-            salesperson: matchedSalesperson?.name || salespersonName || prev.salesperson,
-            taxInclusive: receipt.taxInclusive || prev.taxInclusive,
+          setFormData((currPrev) => ({
+            ...currPrev,
+            customerName: matchedCustomer?.name || normalizedCustomerLabel || currPrev.customerName,
+            receiptDate: receipt.date ? formatDate(receipt.date) : (receipt.receiptDate ? formatDate(receipt.receiptDate) : currPrev.receiptDate),
+            selectedLocation: receipt.selectedLocation || receipt.location || currPrev.selectedLocation,
+            reportingTags: Array.isArray(receipt.reportingTags) ? receipt.reportingTags : currPrev.reportingTags,
+            receiptNumber: receipt.receiptNumber || receipt.salesReceiptNumber || currPrev.receiptNumber,
+            salesperson: matchedSalesperson?.name || salespersonName || currPrev.salesperson,
+            taxInclusive: receipt.taxInclusive || currPrev.taxInclusive,
             items: mappedItems,
-            subTotal: toFiniteNumber(receipt.subtotal ?? receipt.subTotal, prev.subTotal),
-            discount: toFiniteNumber(receipt.discount, prev.discount),
-            discountType: String(receipt.discountType || prev.discountType || "percent").toLowerCase().includes("amount") ? "amount" : "percent",
-            shippingCharges: toFiniteNumber(receipt.shippingCharges, prev.shippingCharges),
-            shippingChargeTax: receipt.shippingChargeTax || receipt.shippingTax || prev.shippingChargeTax,
-            adjustment: toFiniteNumber(receipt.adjustment, prev.adjustment),
-            roundOff: toFiniteNumber(receipt.roundOff, prev.roundOff),
-            total: toFiniteNumber(receipt.total ?? receipt.amount, prev.total),
-            createdBy: getCreatedByValue(receipt.createdBy) || prev.createdBy,
-            currency: receipt.currency || prev.currency,
-            notes: receipt.notes || prev.notes,
-            termsAndConditions: receipt.termsAndConditions || receipt.terms || prev.termsAndConditions,
-            paymentMode: receipt.paymentMode || receipt.paymentMethod || prev.paymentMode,
-            depositTo: matchedDepositAccount?.accountName || matchedDepositAccount?.name || receipt.depositTo || prev.depositTo,
-            depositToAccountId: matchedDepositAccount?.id || matchedDepositAccount?._id || depositAccountId || prev.depositToAccountId,
-            referenceNumber: receipt.referenceNumber || receipt.reference || receipt.paymentReference || prev.referenceNumber
+            subTotal: toFiniteNumber(receipt.subtotal ?? receipt.subTotal, currPrev.subTotal),
+            discount: toFiniteNumber(receipt.discount, currPrev.discount),
+            discountType: String(receipt.discountType || currPrev.discountType || "percent").toLowerCase().includes("amount") ? "amount" : "percent",
+            shippingCharges: toFiniteNumber(receipt.shippingCharges, currPrev.shippingCharges),
+            shippingChargeTax: receipt.shippingChargeTax || receipt.shippingTax || currPrev.shippingChargeTax,
+            adjustment: toFiniteNumber(receipt.adjustment, currPrev.adjustment),
+            roundOff: toFiniteNumber(receipt.roundOff, currPrev.roundOff),
+            total: toFiniteNumber(receipt.total ?? receipt.amount, currPrev.total),
+            createdBy: getCreatedByValue(receipt.createdBy) || currPrev.createdBy,
+            currency: receipt.currency || currPrev.currency,
+            notes: receipt.notes || currPrev.notes,
+            termsAndConditions: receipt.termsAndConditions || receipt.terms || currPrev.termsAndConditions,
+            paymentMode: receipt.paymentMode || receipt.paymentMethod || currPrev.paymentMode,
+            depositTo: matchedDepositAccount?.accountName || matchedDepositAccount?.name || receipt.depositTo || currPrev.depositTo,
+            depositToAccountId: matchedDepositAccount?.id || matchedDepositAccount?._id || depositAccountId || currPrev.depositToAccountId,
+            referenceNumber: receipt.referenceNumber || receipt.reference || receipt.paymentReference || currPrev.referenceNumber
           }));
 
           if (matchedCustomer) {
@@ -1418,18 +1452,27 @@ export default function NewSalesReceipt() {
               _id: customerId || undefined,
               name: normalizedCustomerLabel,
               email: receipt.customerEmail || customerObject?.email || ""
-            });
+            } as any);
           }
 
           if (matchedSalesperson) {
             setSelectedSalesperson(matchedSalesperson);
           } else if (salespersonName) {
-            setSelectedSalesperson({ name: salespersonName });
+            setSelectedSalesperson({ name: salespersonName } as any);
+          }
+
+          if (receipt.depositToAccountId && depositAccounts.length > 0) {
+            const acc = depositAccounts.find((a: any) => String(a.id || a._id) === String(receipt.depositToAccountId || ""));
+            if (acc) {
+               setFormData(prev => ({ ...prev, depositTo: acc.accountName || acc.name }));
+            }
           }
 
           hasLoadedEditDataRef.current = true;
         } catch (error) {
           console.error("Error loading receipt data:", error);
+          // Try to set some identifier so the user knows it at least partially loaded
+          // but an error occurred
         }
       } else {
         // Fetch next receipt number for new receipt
@@ -1975,6 +2018,29 @@ export default function NewSalesReceipt() {
     );
   };
 
+  const getItemDropdownPosition = (itemId) => {
+    const ref = itemDropdownRefs.current[itemId];
+    const element = ref?.current || ref;
+    if (!element || typeof element.getBoundingClientRect !== "function") return null;
+
+    const rect = element.getBoundingClientRect();
+    const dropdownHeight = 320;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const shouldOpenAbove = spaceBelow < 220 && spaceAbove > spaceBelow;
+    const availableHeight = shouldOpenAbove
+      ? Math.max(180, Math.min(dropdownHeight, spaceAbove - 12))
+      : Math.max(180, Math.min(dropdownHeight, spaceBelow - 12));
+
+    return {
+      top: shouldOpenAbove ? Math.max(8, rect.top - availableHeight - 4) : rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+      maxHeight: availableHeight,
+    };
+  };
+
   const getFilteredTaxes = (itemId) => {
     const searchTerm = (taxSearches[itemId] || "").trim().toLowerCase();
     if (!searchTerm) return taxes;
@@ -2372,7 +2438,7 @@ export default function NewSalesReceipt() {
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <FileText size={20} className="text-gray-900" />
-          <h1 className="text-[17px] font-bold text-gray-900">New Sales Receipt</h1>
+          <h1 className="text-[17px] font-bold text-gray-900">{isEditMode ? "Edit Sales Receipt" : "New Sales Receipt"}</h1>
         </div>
         <button
           className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600 transition-colors"
@@ -3114,52 +3180,74 @@ export default function NewSalesReceipt() {
                             </div>
                           )}
 
-                          {openItemDropdowns[item.id] && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
-                              {getFilteredItems(item.id).length > 0 ? (
-                                getFilteredItems(item.id).map((productItem, idx) => {
-                                  const isHighlighted =
-                                    idx === 0 ||
-                                    selectedItemIds[item.id] === (productItem.id || productItem._id);
-                                  return (
-                                    <button
-                                      type="button"
-                                      key={`${productItem.id || productItem._id}-${idx}`}
-                                      className={`w-full p-3 text-left border-b border-gray-100 transition-colors ${isHighlighted ? "bg-gray-50 text-gray-900" : "text-gray-800 hover:bg-[#f8fafc]"
-                                        }`}
-                                      onClick={() => {
-                                        handleProductSelect(item.id, productItem);
-                                        setOpenItemDropdowns(prev => ({ ...prev, [item.id]: false }));
-                                      }}
-                                      >
-                                      <div className="flex items-center gap-2 text-[14px] leading-5 font-semibold truncate">
-                                        <span className="truncate">{productItem.name}</span>
-                                      </div>
-                                      <div className={`text-xs mt-0.5 truncate ${isHighlighted ? "text-gray-600" : "text-slate-500"}`}>
-                                        SKU: {productItem.sku || "-"} Rate: {formData.currency}{(productItem.rate || productItem.sellingPrice || 0).toFixed(2)}
-                                      </div>
-                                    </button>
-                                  );
-                                })
-                              ) : (
-                                <div className="p-4 text-center text-sm text-gray-500">
-                                  {itemSearches[item.id] ? "No items found" : "No items available"}
-                                </div>
-                              )}
-                              <button
-                                className="flex items-center gap-2 px-4 py-3 border-t border-gray-200 bg-white text-sm font-medium cursor-pointer hover:bg-[#f8fafc] w-full transition-colors"
-                                style={{ color: "#2563eb" }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setOpenItemDropdowns(prev => ({ ...prev, [item.id]: false }));
-                                  navigate("/items", { state: { showNewItem: true, returnTo: window.location.pathname } });
+                          {openItemDropdowns[item.id] && (() => {
+                            const dropdownPosition = getItemDropdownPosition(item.id);
+                            if (!dropdownPosition) return null;
+
+                            return createPortal(
+                              <div
+                                ref={el => {
+                                  if (!itemDropdownPortalRefs.current[item.id]) {
+                                    itemDropdownPortalRefs.current[item.id] = { current: null };
+                                  }
+                                  itemDropdownPortalRefs.current[item.id].current = el;
+                                }}
+                                className="fixed z-[9999] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-2xl"
+                                style={{
+                                  top: dropdownPosition.top,
+                                  left: dropdownPosition.left,
+                                  width: dropdownPosition.width,
+                                  maxHeight: dropdownPosition.maxHeight,
                                 }}
                               >
-                                <Plus size={16} />
-                                Add New Item
-                              </button>
-                            </div>
-                          )}
+                                <div className="overflow-y-auto" style={{ maxHeight: dropdownPosition.maxHeight - 49 }}>
+                                  {getFilteredItems(item.id).length > 0 ? (
+                                    getFilteredItems(item.id).map((productItem, idx) => {
+                                      const isHighlighted =
+                                        idx === 0 ||
+                                        selectedItemIds[item.id] === (productItem.id || productItem._id);
+                                      return (
+                                        <button
+                                          type="button"
+                                          key={`${productItem.id || productItem._id}-${idx}`}
+                                          className={`w-full border-b border-gray-100 p-3 text-left transition-colors ${isHighlighted ? "bg-gray-50 text-gray-900" : "text-gray-800 hover:bg-[#f8fafc]"
+                                            }`}
+                                          onClick={() => {
+                                            handleProductSelect(item.id, productItem);
+                                            setOpenItemDropdowns(prev => ({ ...prev, [item.id]: false }));
+                                          }}
+                                        >
+                                          <div className="flex items-center gap-2 truncate text-[14px] font-semibold leading-5">
+                                            <span className="truncate">{productItem.name}</span>
+                                          </div>
+                                          <div className={`mt-0.5 truncate text-xs ${isHighlighted ? "text-gray-600" : "text-slate-500"}`}>
+                                            SKU: {productItem.sku || "-"} Rate: {formData.currency}{(productItem.rate || productItem.sellingPrice || 0).toFixed(2)}
+                                          </div>
+                                        </button>
+                                      );
+                                    })
+                                  ) : (
+                                    <div className="p-4 text-center text-sm text-gray-500">
+                                      {itemSearches[item.id] ? "No items found" : "No items available"}
+                                    </div>
+                                  )}
+                                </div>
+                                <button
+                                  className="flex w-full cursor-pointer items-center gap-2 border-t border-gray-200 bg-white px-4 py-3 text-sm font-medium transition-colors hover:bg-[#f8fafc]"
+                                  style={{ color: "#2563eb" }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenItemDropdowns(prev => ({ ...prev, [item.id]: false }));
+                                    navigate("/items", { state: { showNewItem: true, returnTo: window.location.pathname } });
+                                  }}
+                                >
+                                  <Plus size={16} />
+                                  Add New Item
+                                </button>
+                              </div>,
+                              document.body
+                            );
+                          })()}
 
                         </div>
                       </td>
