@@ -678,11 +678,6 @@ const REPORTS_DRAWER_SECTIONS: ReportsDrawerSection[] = [
     ],
   },
   {
-    id: "subscriptions",
-    label: "Recurring Invoices",
-    reportIds: ["subscription-details"],
-  },
-  {
     id: "purchases-expenses",
     label: "Purchases and Expenses",
     reportIds: [
@@ -696,7 +691,7 @@ const REPORTS_DRAWER_SECTIONS: ReportsDrawerSection[] = [
   {
     id: "taxes",
     label: "Taxes",
-    reportIds: ["tax-summary", "tds-receivables"],
+    reportIds: ["tax-summary"],
   },
   {
     id: "projects-timesheets",

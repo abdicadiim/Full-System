@@ -83,6 +83,9 @@ export default function ReportDetailPage() {
   if (reportId === "expenses-by-customer") {
     return <ExpensesByCustomerReportPage />;
   }
+  if (reportId === "expenses-by-project") {
+    return <ExpensesByCustomerReportPage />;
+  }
   if (reportId === "expense-details") {
     return <ExpenseDetailsReportPage />;
   }

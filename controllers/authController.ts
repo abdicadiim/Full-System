@@ -36,6 +36,43 @@ const LOGIN_OTP_EXPIRES_IN_SECONDS = 90;
 const PASSWORD_RESET_EXPIRES_IN_SECONDS = 90;
 const EMAIL_VERIFICATION_EXPIRES_IN_SECONDS = 300;
 const isUserEmailVerified = (user: any) => (user as any)?.emailVerified !== false;
+const looksLikeBcryptHash = (value: unknown) => {
+  const hash = String(value || "").trim();
+  return /^\$2[aby]?\$\d{2}\$[./A-Za-z0-9]{53}$/.test(hash);
+};
+
+const matchesStoredPassword = async (user: any, password: string) => {
+  const rawPassword = String(password ?? "");
+  const trimmedPassword = rawPassword.trim();
+  const hashCandidates = [
+    user?.passwordHash,
+    user?.password,
+    user?.hashedPassword,
+    user?.passHash,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  for (const candidate of hashCandidates) {
+    if (candidate === rawPassword || candidate === trimmedPassword) {
+      return true;
+    }
+    if (looksLikeBcryptHash(candidate)) {
+      const rawMatch = await bcrypt.compare(rawPassword, candidate).catch(() => false);
+      if (rawMatch) return true;
+      if (trimmedPassword !== rawPassword) {
+        const trimmedMatch = await bcrypt.compare(trimmedPassword, candidate).catch(() => false);
+        if (trimmedMatch) return true;
+      }
+      continue;
+    }
+    if (candidate && candidate === trimmedPassword) {
+      return true;
+    }
+  }
+
+  return false;
+};
 
 const getAppDisplayName = (app: unknown) => {
   const value = String(app || "").trim().toLowerCase();
@@ -465,7 +502,7 @@ export const login = async (req: express.Request, res: express.Response) => {
     return res.status(200).json({ success: false, message: "User is inactive", data: null, code: 403 });
   }
 
-  const ok = await bcrypt.compare(password, user.passwordHash).catch(() => false) || password === user.passwordHash;
+  const ok = await matchesStoredPassword(user, password);
   if (!ok) {
     return res.status(200).json({
       success: false,

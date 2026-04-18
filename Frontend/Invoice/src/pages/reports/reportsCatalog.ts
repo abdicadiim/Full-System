@@ -1144,7 +1144,7 @@ const ALL_REPORTS: ReportDefinition[] = [
   {
     id: "expenses-by-category",
     categoryId: "purchases-expenses",
-    name: "Expense Summary by Category",
+    name: "Expenses by Category",
     summary: "Category-level expense summary and totals.",
     howItHelps: "Find major spend drivers and optimize cost controls.",
     functionSupport: support("filter", "sort", "share", "export", "print"),

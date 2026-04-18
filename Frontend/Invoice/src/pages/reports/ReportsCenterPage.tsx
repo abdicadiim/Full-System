@@ -18,7 +18,15 @@ const FAVORITES_KEY = "reports_center_favorites_v1";
 const LAST_VISITED_KEY = "reports_center_last_visited_v1";
 
 const REPORT_SECTIONS: ReportSection[] = [
-  { id: "sales", label: "Sales", reportIds: ["sales-by-customer", "sales-by-item", "sales-by-sales-person"] },
+  {
+    id: "sales",
+    label: "Sales",
+    reportIds: [
+      "sales-by-customer",
+      "sales-by-item",
+      "sales-by-sales-person",
+    ],
+  },
   {
     id: "receivables",
     label: "Receivables",
@@ -45,22 +53,42 @@ const REPORT_SECTIONS: ReportSection[] = [
       "withholding-tax",
     ],
   },
-  { id: "subscriptions", label: "Recurring Invoices", reportIds: ["subscription-details"] },
   {
     id: "purchases-expenses",
     label: "Purchases and Expenses",
-    reportIds: ["expense-details", "expenses-by-category", "expenses-by-customer", "expenses-by-project", "billable-expense-details"],
+    reportIds: [
+      "expense-details",
+      "expenses-by-customer",
+      "billable-expense-details",
+      "expenses-by-category",
+      "expenses-by-project",
+    ],
   },
-  { id: "taxes", label: "Taxes", reportIds: ["tax-summary", "tds-receivables"] },
+  {
+    id: "taxes",
+    label: "Taxes",
+    reportIds: ["tax-summary"],
+  },
   {
     id: "projects-timesheets",
     label: "Projects and Timesheet",
-    reportIds: ["timesheet-details", "project-summary", "project-details", "projects-revenue-summary"],
+    reportIds: [
+      "timesheet-details",
+      "project-summary",
+      "project-details",
+      "projects-revenue-summary",
+    ],
   },
   {
     id: "activity",
     label: "Activity",
-    reportIds: ["system-mails", "exception-report", "customer-reviews", "activity-logs-audit-trail", "portal-activities"],
+    reportIds: [
+      "system-mails",
+      "activity-logs-audit-trail",
+      "exception-report",
+      "portal-activities",
+      "customer-reviews",
+    ],
   },
 ];
 

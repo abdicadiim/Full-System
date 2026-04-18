@@ -20,7 +20,7 @@ import ReportCustomizeColumnsModal, {
 } from "./ReportCustomizeColumnsModal";
 import { getCategoryById, getReportById, REPORTS_BY_CATEGORY } from "./reportsCatalog";
 import { useSettings } from "../../lib/settings/SettingsContext";
-import { expensesAPI } from "../../services/api";
+import { API_BASE_URL, getToken } from "../../services/auth";
 
 type ReportsDrawerSection = {
   id: string;
@@ -284,37 +284,28 @@ type DateRangeKey =
   | "previous-year"
   | "all-time"
   | "custom";
-type GroupByKey = "none" | "status" | "category" | "customer-name";
+type GroupByKey = "none";
 type ColumnKey =
-  | "Status"
-  | "Date"
-  | "Reference#"
-  | "Category"
-  | "Customer Name"
-  | "Amount"
-  | "Amount With Tax";
+  | "Tax Name"
+  | "Tax Percentage"
+  | "Taxable Amount"
+  | "Tax Amount";
 type DateRangeValue = { start: Date; end: Date };
-type ExpenseRow = {
+type TaxSummaryRow = {
   id: string;
-  status: string;
   dateValue: Date | null;
-  dateLabel: string;
-  reference: string;
-  category: string;
-  customerName: string;
-  amount: number;
-  amountWithTax: number;
+  taxName: string;
+  taxPercent: number;
+  taxableAmount: number;
+  taxAmount: number;
   currency: string;
 };
 
 const COLUMNS: ColumnKey[] = [
-  "Status",
-  "Date",
-  "Reference#",
-  "Category",
-  "Customer Name",
-  "Amount",
-  "Amount With Tax",
+  "Tax Name",
+  "Tax Percentage",
+  "Taxable Amount",
+  "Tax Amount",
 ];
 
 const COLUMN_GROUPS: ColumnGroup[] = [{ label: "Reports", items: COLUMNS }];
@@ -351,12 +342,7 @@ const MONTH_NAMES = [
 
 const CALENDAR_YEAR_OPTIONS = Array.from({ length: 120 }, (_, index) => 2007 + index);
 
-const GROUP_OPTIONS: Array<{ key: GroupByKey; label: string }> = [
-  { key: "none", label: "None" },
-  { key: "status", label: "Status" },
-  { key: "category", label: "Category" },
-  { key: "customer-name", label: "Customer Name" },
-];
+const GROUP_OPTIONS: Array<{ key: GroupByKey; label: string }> = [{ key: "none", label: "None" }];
 
 const fmtDate = (value: Date) =>
   value.toLocaleDateString("en-GB", {
@@ -436,17 +422,31 @@ const normalizeCurrency = (value: unknown) => {
   const raw = toText(value);
   return (raw.split(" - ")[0].split(" ")[0].trim().toUpperCase() || "SOS");
 };
+const getAuthHeaders = () => {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+const fetchCollectionRows = async (path: string) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      credentials: "include",
+      headers: {
+        Accept: "application/json",
+        ...getAuthHeaders(),
+      },
+    });
+
+    if (!response.ok) return [];
+    const payload = await response.json().catch(() => null);
+    return Array.isArray(payload?.data) ? payload.data : [];
+  } catch {
+    return [];
+  }
+};
 const parseDate = (value: unknown) => {
   if (!value) return null;
   const date = new Date(String(value));
   return Number.isNaN(date.getTime()) ? null : date;
-};
-const extractRows = (response: any) => {
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response?.expenses)) return response.expenses;
-  if (Array.isArray(response?.data)) return response.data;
-  if (Array.isArray(response?.data?.data)) return response.data.data;
-  return [];
 };
 const getRange = (key: DateRangeKey, custom: DateRangeValue) => {
   const now = new Date();
@@ -486,14 +486,14 @@ const inRange = (value: Date, range: DateRangeValue) =>
 const formatMoney = (value: number, currency: string) =>
   `${normalizeCurrency(currency)}${Number(value || 0).toFixed(2)}`;
 
-export default function ExpenseDetailsReportPage() {
+export default function TaxSummaryReportPage() {
   const navigate = useNavigate();
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const dateRangeRef = useRef<HTMLDivElement | null>(null);
   const { categoryId, reportId } = useParams();
   const { settings } = useSettings() as any;
   const category = getCategoryById(categoryId || "purchases-expenses");
-  const report = getReportById(categoryId || "purchases-expenses", reportId || "expense-details");
+  const report = getReportById(categoryId || "purchases-expenses", reportId || "billable-expense-details");
   const organizationName = String(
     settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "",
   ).trim();
@@ -523,14 +523,12 @@ export default function ExpenseDetailsReportPage() {
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   const [groupBy, setGroupBy] = useState<GroupByKey>("none");
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [customerFilter, setCustomerFilter] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
-  const [referenceFilter, setReferenceFilter] = useState("");
+  const [vendorFilter, setVendorFilter] = useState("");
+  const [itemFilter, setItemFilter] = useState("");
   const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(() => {
     try {
       if (typeof window === "undefined") return COLUMNS;
-      const raw = window.localStorage.getItem("expense_details_visible_columns_v1");
+      const raw = window.localStorage.getItem("tax_summary_visible_columns_v1");
       const parsed = raw ? JSON.parse(raw) : null;
       if (Array.isArray(parsed) && parsed.every((item) => COLUMNS.includes(item))) {
         return parsed;
@@ -538,7 +536,7 @@ export default function ExpenseDetailsReportPage() {
     } catch {
       // ignore
     }
-    return COLUMNS;
+      return COLUMNS;
   });
 
   const range = useMemo(() => getRange(dateRangeKey, customDateRange), [customDateRange, dateRangeKey]);
@@ -570,33 +568,118 @@ export default function ExpenseDetailsReportPage() {
   }, [isDateRangeOpen, cancelDateRangeSelection]);
 
   const query = useQuery({
-    queryKey: ["reports", "expense-details", refreshTick],
+    queryKey: ["reports", "tax-summary", refreshTick],
     staleTime: 30_000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const response = await expensesAPI.getAll({ limit: 1000 });
-      const items = extractRows(response);
-      return {
-        rows: items.map((expense: any): ExpenseRow => {
-          const dateValue = parseDate(expense.date || expense.expense_date || expense.createdAt || expense.created_at);
-          const amount = toNumber(expense.sub_total ?? expense.subTotal ?? expense.amount ?? expense.total ?? 0);
-          const taxAmount = toNumber(expense.tax_amount ?? expense.taxAmount ?? expense.total_tax ?? expense.tax ?? 0);
-          const amountWithTax = toNumber(expense.total ?? expense.amount_with_tax ?? expense.amountWithTax ?? amount + taxAmount);
+      const [invoices, receipts] = await Promise.all([
+        fetchCollectionRows("/invoices"),
+        fetchCollectionRows("/sales-receipts"),
+      ]);
+      const items = [...invoices, ...receipts];
+      const rows: TaxSummaryRow[] = items.flatMap((document: any) => {
+        const dateValue = parseDate(
+          document.date ||
+            document.invoiceDate ||
+            document.invoice_date ||
+            document.receiptDate ||
+            document.receipt_date ||
+            document.createdAt ||
+            document.created_at ||
+            document.updatedAt ||
+            document.updated_at,
+        );
+        if (!dateValue) return [];
+
+        const currency = normalizeCurrency(document.currency_code || document.currencyCode || document.currency || "SOS");
+        const baseItems = Array.isArray(document.items)
+          ? document.items
+          : Array.isArray(document.lines)
+            ? document.lines
+            : Array.isArray(document.lineItems)
+              ? document.lineItems
+              : [];
+        const fallbackLabel = "Tax";
+
+        const buildRow = (item: any, index: number): TaxSummaryRow => {
+          const taxName =
+            toText(
+              item?.taxName ||
+                item?.tax_name ||
+                item?.tax?.name ||
+                item?.tax?.taxName ||
+                item?.tax_label ||
+                item?.taxLabel ||
+                document?.taxName ||
+                document?.tax_name ||
+                fallbackLabel,
+            ) || fallbackLabel;
+          const taxPercent = toNumber(
+            item?.taxRate ??
+              item?.tax_rate ??
+              item?.taxPercentage ??
+              item?.tax_percentage ??
+              item?.tax?.rate ??
+              item?.tax?.taxRate ??
+              document?.taxRate ??
+              document?.tax_rate ??
+              document?.taxPercentage ??
+              document?.tax_percentage ??
+              0,
+          );
+          const taxableAmount = toNumber(
+            item?.taxableAmount ??
+              item?.taxable_amount ??
+              item?.sub_total ??
+              item?.subTotal ??
+              item?.amount ??
+              item?.total ??
+              item?.price ??
+              item?.lineTotal ??
+              item?.netAmount ??
+              document?.subtotal ??
+              document?.sub_total ??
+              document?.total ??
+              0,
+          );
+          const taxAmount = toNumber(
+            item?.taxAmount ??
+              item?.tax_amount ??
+              item?.tax ??
+              item?.amountTax ??
+              item?.vat ??
+              item?.totalTax ??
+              document?.taxAmount ??
+              document?.tax_amount ??
+              document?.totalTax ??
+              (taxPercent > 0 ? (taxableAmount * taxPercent) / 100 : 0),
+          );
 
           return {
-            id: String(expense._id || expense.id || expense.expense_id || `${expense.reference_number || ""}-${expense.date || ""}`),
-            status: toText(expense.status || expense.expense_status || expense.state || "—").toUpperCase() || "—",
+            id: String(
+              item?._id ||
+                item?.id ||
+                document?._id ||
+                document?.id ||
+                document?.invoiceNumber ||
+                document?.receiptNumber ||
+                `${taxName}-${taxPercent}-${dateValue.toISOString()}-${index}`,
+            ),
             dateValue,
-            dateLabel: dateValue ? fmtDate(dateValue) : "—",
-            reference: toText(expense.reference_number || expense.reference || expense.reference_no || expense.ref_no || "—") || "—",
-            category: toText(expense.category_name || expense.categoryName || expense.account_name || expense.expenseAccount || expense.expense_account_name || expense.category || "—") || "—",
-            customerName: toText(expense.customer_name || expense.customerName || expense.customer?.name || expense.customer?.displayName || "—") || "—",
-            amount,
-            amountWithTax,
-            currency: normalizeCurrency(expense.currency_code || expense.currencyCode || expense.currency || "SOS"),
+            taxName,
+            taxPercent,
+            taxableAmount,
+            taxAmount,
+            currency,
           };
-        }),
-      };
+        };
+
+        if (baseItems.length === 0) {
+          return [buildRow({}, 0)];
+        }
+        return baseItems.map((item: any, index: number) => buildRow(item, index));
+      });
+      return { rows };
     },
   });
 
@@ -604,32 +687,48 @@ export default function ExpenseDetailsReportPage() {
     const rows = query.data?.rows || [];
     return rows
       .filter((row) => row.dateValue && inRange(row.dateValue, range))
-      .filter((row) => (statusFilter === "All" ? true : row.status.toLowerCase().includes(statusFilter.toLowerCase())))
-      .filter((row) => (customerFilter.trim() ? row.customerName.toLowerCase().includes(customerFilter.trim().toLowerCase()) : true))
-      .filter((row) => (categoryFilter.trim() ? row.category.toLowerCase().includes(categoryFilter.trim().toLowerCase()) : true))
-      .filter((row) => (referenceFilter.trim() ? row.reference.toLowerCase().includes(referenceFilter.trim().toLowerCase()) : true))
+      .filter((row) => (vendorFilter.trim() ? row.taxName.toLowerCase().includes(vendorFilter.trim().toLowerCase()) : true))
+      .filter((row) => (itemFilter.trim() ? String(row.taxPercent ?? 0).includes(itemFilter.trim()) : true))
       .sort((a, b) => (b.dateValue?.getTime() || 0) - (a.dateValue?.getTime() || 0));
-  }, [categoryFilter, customerFilter, query.data?.rows, range, referenceFilter, statusFilter]);
+  }, [itemFilter, query.data?.rows, range, vendorFilter]);
 
   const groupedRows = useMemo(() => {
-    if (groupBy === "none") return [{ label: "All Expenses", rows: filteredRows }];
-    const map = new Map<string, ExpenseRow[]>();
+    const grouped = new Map<string, { taxName: string; taxPercent: number; taxableAmount: number; taxAmount: number; currency: string }>();
     filteredRows.forEach((row) => {
-      const key =
-        groupBy === "status" ? row.status :
-        groupBy === "category" ? row.category :
-        row.customerName;
-      const next = map.get(key || "Unassigned") || [];
-      next.push(row);
-      map.set(key || "Unassigned", next);
+      const key = `${row.taxName}-${row.taxPercent}-${row.currency}`;
+      const current = grouped.get(key) || {
+        taxName: row.taxName,
+        taxPercent: row.taxPercent,
+        taxableAmount: 0,
+        taxAmount: 0,
+        currency: row.currency,
+      };
+      current.taxableAmount += row.taxableAmount;
+      current.taxAmount += row.taxAmount;
+      grouped.set(key, current);
     });
-    return Array.from(map.entries()).sort(([left], [right]) => left.localeCompare(right)).map(([label, rows]) => ({ label, rows }));
-  }, [filteredRows, groupBy]);
+    return [...grouped.values()]
+      .sort((a, b) => b.taxAmount - a.taxAmount)
+      .map((group) => ({
+        label: `${group.taxName} (${group.taxPercent.toFixed(2)}%)`,
+        rows: [
+          {
+            id: `${group.taxName}-${group.taxPercent}-${group.currency}`,
+            dateValue: null,
+            taxName: group.taxName,
+            taxPercent: group.taxPercent,
+            taxableAmount: group.taxableAmount,
+            taxAmount: group.taxAmount,
+            currency: group.currency,
+          } as TaxSummaryRow,
+        ],
+      }));
+  }, [filteredRows]);
 
   useEffect(() => {
     try {
       if (typeof window === "undefined") return;
-      window.localStorage.setItem("expense_details_visible_columns_v1", JSON.stringify(visibleColumns));
+      window.localStorage.setItem("tax_summary_visible_columns_v1", JSON.stringify(visibleColumns));
     } catch {
       // ignore
     }
@@ -726,8 +825,8 @@ export default function ExpenseDetailsReportPage() {
         triggerRef={menuButtonRef}
         onClose={() => setIsReportsDrawerOpen(false)}
       />
-      <div className="space-y-4 pr-3">
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#e5e7eb] pb-3">
+      <div className="w-full space-y-4">
+      <div className="flex w-full flex-wrap items-start justify-between gap-4 border-b border-[#e5e7eb] pb-3">
         <div className="flex min-w-0 items-start gap-3">
           <button
             type="button"
@@ -1101,40 +1200,18 @@ export default function ExpenseDetailsReportPage() {
           <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[360px] rounded-lg border border-[#d7dce7] bg-white p-4 shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
             <div className="grid gap-3">
               <label className="block">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">Status</div>
-                <select
-                  value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value)}
-                  className="h-9 w-full rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#1b6f7b]"
-                >
-                  {["All", "Draft", "Pending", "Approved", "Paid", "Voided"].map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">Customer Name</div>
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">Tax Name</div>
                 <input
-                  value={customerFilter}
-                  onChange={(event) => setCustomerFilter(event.target.value)}
+                  value={vendorFilter}
+                  onChange={(event) => setVendorFilter(event.target.value)}
                   className="h-9 w-full rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#1b6f7b]"
                 />
               </label>
               <label className="block">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">Category</div>
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">Tax Percentage</div>
                 <input
-                  value={categoryFilter}
-                  onChange={(event) => setCategoryFilter(event.target.value)}
-                  className="h-9 w-full rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#1b6f7b]"
-                />
-              </label>
-              <label className="block">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">Reference#</div>
-                <input
-                  value={referenceFilter}
-                  onChange={(event) => setReferenceFilter(event.target.value)}
+                  value={itemFilter}
+                  onChange={(event) => setItemFilter(event.target.value)}
                   className="h-9 w-full rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#1b6f7b]"
                 />
               </label>
@@ -1142,10 +1219,8 @@ export default function ExpenseDetailsReportPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setStatusFilter("All");
-                    setCustomerFilter("");
-                    setCategoryFilter("");
-                    setReferenceFilter("");
+                    setVendorFilter("");
+                    setItemFilter("");
                   }}
                   className="text-sm font-medium text-[#1b6f7b] hover:underline"
                 >
@@ -1164,8 +1239,8 @@ export default function ExpenseDetailsReportPage() {
         ) : null}
       </div>
 
-      <div className="rounded-lg border border-[#e5e7eb] bg-white">
-        <div className="flex items-center justify-end gap-3 border-b border-[#eef2f7] px-4 py-3">
+      <div className="w-full rounded-lg border border-[#e5e7eb] bg-white">
+        <div className="flex items-center justify-end gap-3 border-b border-[#eef2f7] px-3 py-2">
           <div className="relative">
             <button
               type="button"
@@ -1211,21 +1286,28 @@ export default function ExpenseDetailsReportPage() {
           </button>
         </div>
 
-        <div className="px-4 py-8 text-center">
-          <div className="text-[14px] text-[#64748b]">{organizationName || "Organization"}</div>
-          <div className="mt-1 text-[20px] font-medium text-[#111827]">{report.name}</div>
-          <div className="mt-1 text-[14px] text-[#156372]">{dateRangeText}</div>
+        <div className="px-3 py-4">
+          <div className="rounded-[12px] border border-[#eef2f7] bg-[#fbfcfe] px-4 py-4 text-center">
+            <div className="text-[13px] text-[#64748b]">{organizationName || "Organization"}</div>
+            <div className="mt-1 text-[18px] font-semibold text-[#111827]">{report.name}</div>
+            <div className="mt-1 text-[13px] text-[#156372]">{dateRangeText}</div>
+            <div className="mt-2 text-[13px] text-[#334155]">Basis : <span className="font-semibold text-[#0f172a]">Accrual</span></div>
+          </div>
         </div>
 
         <div className="overflow-x-auto border-t border-[#eef2f7]">
-          <table className="min-w-full border-collapse">
+          <table className="w-full min-w-full border-collapse">
             <thead>
               <tr className="border-b border-[#e5e7eb] text-left text-[11px] uppercase tracking-[0.08em] text-[#64748b]">
                 {visibleColumns.map((column) => (
                   <th
                     key={column}
-                    className={`px-4 py-3 font-semibold ${
-                      column === "Amount" || column === "Amount With Tax" ? "text-right" : "text-left"
+                    className={`px-3 py-3 font-semibold ${
+                      column === "Tax Percentage" ||
+                      column === "Taxable Amount" ||
+                      column === "Tax Amount"
+                        ? "text-right"
+                        : "text-left"
                     }`}
                   >
                     {column}
@@ -1236,20 +1318,20 @@ export default function ExpenseDetailsReportPage() {
             <tbody>
               {query.isLoading ? (
                 <tr className="border-b border-[#eef2f7]">
-                  <td className="px-4 py-8 text-center text-sm text-[#64748b]" colSpan={visibleColumns.length}>
+                  <td className="px-3 py-8 text-center text-sm text-[#64748b]" colSpan={visibleColumns.length}>
                     Loading report data...
                   </td>
                 </tr>
               ) : query.isError ? (
                 <tr className="border-b border-[#eef2f7]">
-                  <td className="px-4 py-8 text-center text-sm text-[#b91c1c]" colSpan={visibleColumns.length}>
-                    {query.error instanceof Error ? query.error.message : "Failed to load expense details"}
+                  <td className="px-3 py-8 text-center text-sm text-[#b91c1c]" colSpan={visibleColumns.length}>
+                    {query.error instanceof Error ? query.error.message : "Failed to load tax summary"}
                   </td>
                 </tr>
               ) : filteredRows.length === 0 ? (
                 <tr className="border-b border-[#eef2f7]">
-                  <td className="px-4 py-8 text-center text-sm text-[#64748b]" colSpan={visibleColumns.length}>
-                    There are no transactions during the selected date range.
+                  <td className="px-3 py-8 text-center text-sm text-[#64748b]" colSpan={visibleColumns.length}>
+                    No data to display
                   </td>
                 </tr>
               ) : (
@@ -1257,7 +1339,7 @@ export default function ExpenseDetailsReportPage() {
                   <React.Fragment key={group.label}>
                     {groupBy !== "none" ? (
                       <tr className="bg-[#f8fafc]">
-                        <td className="px-4 py-2 text-[12px] font-semibold text-[#334155]" colSpan={visibleColumns.length}>
+                        <td className="px-3 py-2 text-[12px] font-semibold text-[#334155]" colSpan={visibleColumns.length}>
                           {group.label}
                           <span className="ml-2 font-normal text-[#64748b]">({group.rows.length})</span>
                         </td>
@@ -1268,23 +1350,21 @@ export default function ExpenseDetailsReportPage() {
                         {visibleColumns.map((column) => (
                           <td
                             key={`${row.id}-${column}`}
-                            className={`px-4 py-3 text-sm text-[#334155] ${
-                              column === "Amount" || column === "Amount With Tax" ? "text-right" : "text-left"
+                            className={`px-3 py-3 text-sm text-[#334155] ${
+                              column === "Tax Percentage" ||
+                              column === "Taxable Amount" ||
+                              column === "Tax Amount"
+                                ? "text-right"
+                                : "text-left"
                             }`}
                           >
-                            {column === "Status"
-                              ? row.status
-                              : column === "Date"
-                                ? row.dateLabel
-                                : column === "Reference#"
-                                  ? row.reference
-                                  : column === "Category"
-                                    ? row.category
-                                    : column === "Customer Name"
-                                      ? row.customerName
-                                      : column === "Amount"
-                                        ? formatMoney(row.amount, row.currency)
-                                        : formatMoney(row.amountWithTax, row.currency)}
+                            {column === "Tax Name"
+                              ? row.taxName
+                              : column === "Tax Percentage"
+                                ? `${Number(row.taxPercent || 0).toFixed(2)}%`
+                                : column === "Taxable Amount"
+                                  ? formatMoney(row.taxableAmount, row.currency)
+                                  : formatMoney(row.taxAmount, row.currency)}
                           </td>
                         ))}
                       </tr>
@@ -1313,6 +1393,7 @@ export default function ExpenseDetailsReportPage() {
     </div>
   );
 }
+
 
 
 
