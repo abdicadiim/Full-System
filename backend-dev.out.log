@@ -1,0 +1,8 @@
+
+> full-system-backend@0.1.0 dev
+> powershell -NoProfile -Command "$pids = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; if($pids){ foreach($processId in $pids){ try{ Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue }catch{} }; Start-Sleep -Milliseconds 500 }; tsx watch server.ts"
+
+DB connected.
+API listening on http://localhost:5000
+09:26:29 [tsx] change in ./controllers\creditNotesController.ts Restarting...
+cDB connected.

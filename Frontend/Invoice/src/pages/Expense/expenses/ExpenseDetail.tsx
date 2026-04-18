@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { jsPDF } from "jspdf";
+import { toast } from "react-toastify";
 import {
   ChevronDown,
   Edit,
@@ -11,7 +12,7 @@ import {
   X,
   MessageCircle,
   Trash2,
-  FileText,
+  FileDown,
   ChevronRight,
   Paperclip,
   Plus,
@@ -20,6 +21,7 @@ import {
 import { expensesAPI, chartOfAccountsAPI, currenciesAPI, taxesAPI, customersAPI } from "../../../services/api";
 import { useCurrency } from "../../../hooks/useCurrency";
 import ExpenseCommentsPanel from "./ExpenseCommentsPanel";
+import DeleteConfirmationModal from "../shared/DeleteConfirmationModal";
 
 const EXPENSES_KEY = "expenses_v1";
 
@@ -48,6 +50,7 @@ export default function ExpenseDetail() {
   const [selectedExpenses, setSelectedExpenses] = useState([id]);
   const [showHistory, setShowHistory] = useState(false);
   const [showAssociatedTags, setShowAssociatedTags] = useState(true);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [currencies, setCurrencies] = useState<any[]>([]);
   const moreMenuRef = useRef(null);
   const uploadMenuRef = useRef(null);
@@ -509,7 +512,7 @@ export default function ExpenseDetail() {
       // Validate file size (10MB max)
       const validFiles = files.filter(file => file.size <= 10 * 1024 * 1024);
       if (validFiles.length !== files.length) {
-        alert("Some files exceed the 10MB limit and were not uploaded.");
+        toast.error("Some files exceed the 10MB limit and were not uploaded.");
       }
       if (validFiles.length > 0) {
         setUploadedFiles(prev => {
@@ -534,7 +537,7 @@ export default function ExpenseDetail() {
       // Validate file size (10MB max)
       const validFiles = files.filter(file => file.size <= 10 * 1024 * 1024);
       if (validFiles.length !== files.length) {
-        alert("Some files exceed the 10MB limit and were not uploaded.");
+        toast.error("Some files exceed the 10MB limit and were not uploaded.");
       }
       if (validFiles.length > 0) {
         setUploadedFiles(prev => {
@@ -724,36 +727,13 @@ export default function ExpenseDetail() {
     }
   };
 
-  const handleMakeRecurring = () => {
-    if (!expense) return;
-
-    // Navigate to create recurring expense with current expense data
-    navigate("/expenses/recurring-expenses/new", {
-      state: {
-        fromExpense: expense,
-        expenseAccount: expense.expenseAccount,
-        amount: expense.amount,
-        currency: expense.currency,
-        vendor: expense.vendor,
-        paidThrough: expense.paidThrough,
-      }
-    });
-  };
 
   const handleConvertToInvoice = () => {
     if (!expense) return;
 
-    const hasCustomer = Boolean(expense.customer_id || expense.customerName);
-    const statusValue = String(expense.status || "").toLowerCase();
-    const isBillable = Boolean(expense.is_billable) || statusValue === "billable" || statusValue === "unbilled";
-
-    if (!hasCustomer || !isBillable) {
-      alert("This expense must be billable and linked to a customer before you can convert it to an invoice.");
-      return;
-    }
-
     navigate("/sales/invoices/new", {
       state: {
+        source: "expense",
         customerId: expense.customer_id || "",
         customerName: expense.customerName || "",
         fromExpenseId: expense.expense_id || expense.id || id || "",
@@ -803,61 +783,64 @@ export default function ExpenseDetail() {
   };
 
   const handleDelete = () => {
-    const deleteExpense = async () => {
-      if (!window.confirm("Are you sure you want to delete this expense?")) {
-        return;
-      }
-
-      try {
-        const expenseIdCandidates = getExpenseIdCandidates(expense);
-        let deleted = false;
-        let lastError: any = null;
-
-        for (const candidateId of expenseIdCandidates) {
-          try {
-            const deleteResponse = await expensesAPI.delete(candidateId);
-            const success =
-              deleteResponse === null ||
-              deleteResponse?.success ||
-              deleteResponse?.code === 0;
-
-            if (success || typeof deleteResponse === "object") {
-              deleted = true;
-              break;
-            }
-          } catch (deleteError: any) {
-            lastError = deleteError;
-          }
-        }
-
-        if (!deleted) {
-          throw lastError || new Error("Failed to delete expense.");
-        }
-
-        const idSet = new Set(expenseIdCandidates);
-        const updatedExpenses = expenses.filter((item: any) => {
-          const rowIds = [
-            item?._id,
-            item?.expense_id,
-            item?.id,
-          ]
-            .map((value) => String(value || "").trim())
-            .filter(Boolean);
-          return !rowIds.some((rowId) => idSet.has(rowId));
-        });
-        setExpenses(updatedExpenses);
-        localStorage.setItem(EXPENSES_KEY, JSON.stringify(updatedExpenses));
-        window.dispatchEvent(new Event("expensesUpdated"));
-        window.dispatchEvent(new Event("storage"));
-        navigate("/expenses");
-      } catch (error: any) {
-        console.error("Failed to delete expense:", error);
-        alert(error?.message || "Failed to delete expense.");
-      }
-    };
-
-    deleteExpense();
+    setShowDeleteConfirm(true);
     setMoreMenuOpen(false);
+  };
+
+  const getExpenseStatusClass = (value: any) => {
+    const status = String(value || "").trim().toLowerCase();
+    if (status === "invoiced") return "text-[#ff4d4f]";
+    if (status === "non-billable" || status === "unbilled" || status === "billable") return "text-[#3f5f8f]";
+    return "text-[#7f8ba3]";
+  };
+
+  const confirmDeleteExpense = async () => {
+    try {
+      const expenseIdCandidates = getExpenseIdCandidates(expense);
+      let deleted = false;
+      let lastError: any = null;
+
+      for (const candidateId of expenseIdCandidates) {
+        try {
+          const deleteResponse = await expensesAPI.delete(candidateId);
+          const success =
+            deleteResponse === null ||
+            deleteResponse?.success ||
+            deleteResponse?.code === 0;
+
+          if (success || typeof deleteResponse === "object") {
+            deleted = true;
+            break;
+          }
+        } catch (deleteError: any) {
+          lastError = deleteError;
+        }
+      }
+
+      if (!deleted) {
+        throw lastError || new Error("Failed to delete expense.");
+      }
+
+      const idSet = new Set(expenseIdCandidates);
+      const updatedExpenses = expenses.filter((item: any) => {
+        const rowIds = [
+          item?._id,
+          item?.expense_id,
+          item?.id,
+        ]
+          .map((value) => String(value || "").trim())
+          .filter(Boolean);
+        return !rowIds.some((rowId) => idSet.has(rowId));
+      });
+      setExpenses(updatedExpenses);
+      localStorage.setItem(EXPENSES_KEY, JSON.stringify(updatedExpenses));
+      window.dispatchEvent(new Event("expensesUpdated"));
+      window.dispatchEvent(new Event("storage"));
+      navigate("/expenses");
+    } catch (error: any) {
+      console.error("Failed to delete expense:", error);
+      toast.error(error?.message || "Failed to delete expense.");
+    }
   };
 
   const toEntityId = (value: any): string => {
@@ -898,7 +881,7 @@ export default function ExpenseDetail() {
     try {
       const sourceIdCandidates = getExpenseIdCandidates(expense);
       if (!sourceIdCandidates.length) {
-        alert("Cannot clone this expense because it has no ID.");
+        toast.error("Cannot clone this expense because it has no ID.");
         return;
       }
 
@@ -1015,10 +998,10 @@ export default function ExpenseDetail() {
         return;
       }
 
-      alert("Expense cloned successfully, but it could not be opened automatically.");
+      toast.success("Expense cloned successfully, but it could not be opened automatically.");
     } catch (error: any) {
       console.error("Error cloning expense:", error);
-      alert(error?.message || "Failed to clone expense.");
+      toast.error(error?.message || "Failed to clone expense.");
     }
   };
 
@@ -1227,19 +1210,18 @@ export default function ExpenseDetail() {
               Edit
             </button>
             <div className="w-px h-4 bg-gray-200 mx-0.5" />
-            <button className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-gray-700 bg-transparent border-none cursor-pointer font-medium" onClick={handleConvertToInvoice}>
-              <RotateCw size={14} />
-              Convert to Invoice
-            </button>
-            <div className="w-px h-4 bg-gray-200 mx-0.5" />
-            <button className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-gray-700 bg-transparent border-none cursor-pointer font-medium" onClick={handleMakeRecurring}>
-              <RotateCw size={14} />
-              Make Recurring
-            </button>
-            <div className="w-px h-4 bg-gray-200 mx-0.5" />
+            {String(expense.status || "").toLowerCase() === "unbilled" && (
+              <>
+                <button className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-gray-700 bg-transparent border-none cursor-pointer font-medium" onClick={handleConvertToInvoice}>
+                  <RotateCw size={14} />
+                  Convert to Invoice
+                </button>
+                <div className="w-px h-4 bg-gray-200 mx-0.5" />
+              </>
+            )}
             <button className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-gray-700 bg-transparent border-none cursor-pointer font-medium" onClick={handleExport}>
-              <FileText size={14} />
-              Print
+              <FileDown size={14} />
+              PDF
             </button>
             <div className="w-px h-4 bg-gray-200 mx-0.5" />
             <button
@@ -1275,7 +1257,7 @@ export default function ExpenseDetail() {
                       <span className="text-[37px] font-medium text-[#ff4e4e]">{(expense.currency || baseCurrencyCode || "AMD")}{amountValue}</span>
                       <span className="ml-2 text-[13px] text-[#55607a]">on {expense.date}</span>
                     </div>
-                    <div className="mt-1 text-sm uppercase text-[#7f8ba3]">{(expense.status || "UNBILLED").toUpperCase()}</div>
+                    <div className={`mt-1 text-sm uppercase ${getExpenseStatusClass(expense.status)}`}>{(expense.status || "UNBILLED").toUpperCase()}</div>
                     <div className="mt-6 inline-flex bg-[#c8e1eb] px-3 py-1 text-[13px] text-[#245a6b]">{expense.expenseAccount}</div>
                   </div>
 
@@ -1406,6 +1388,13 @@ export default function ExpenseDetail() {
           />
         </div>
       </div>
+
+      <DeleteConfirmationModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={confirmDeleteExpense}
+        entityName="expense"
+      />
 
       <input
         ref={fileInputRef}

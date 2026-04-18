@@ -7,6 +7,7 @@ import BulkUpdateModal from "../shared/BulkUpdateModal";
 import DeleteConfirmationModal from "../shared/DeleteConfirmationModal";
 import ExportExpenses from "./ExportExpenses";
 import JSZip from "jszip";
+import { toast } from "react-toastify";
 import {
   expensesAPI,
   vendorsAPI,
@@ -240,6 +241,20 @@ export default function Expenses() {
     [allTableColumns, columnWidths, visibleColumnKeys]
   );
 
+  const renderTableColGroup = () => (
+    <colgroup>
+      <col style={{ width: columnWidths.select }} />
+      {isColumnVisible("date") && <col style={{ width: columnWidths.date }} />}
+      {isColumnVisible("location") && <col style={{ width: columnWidths.location }} />}
+      {isColumnVisible("expenseAccount") && <col style={{ width: columnWidths.expenseAccount }} />}
+      {isColumnVisible("reference") && <col style={{ width: columnWidths.reference }} />}
+      {isColumnVisible("customerName") && <col style={{ width: columnWidths.customerName }} />}
+      {isColumnVisible("status") && <col style={{ width: columnWidths.status }} />}
+      {isColumnVisible("amount") && <col style={{ width: columnWidths.amount }} />}
+      <col style={{ width: columnWidths.actions }} />
+    </colgroup>
+  );
+
   const startResizing = (key: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -443,12 +458,20 @@ export default function Expenses() {
       const vendorName = expense.vendor_name || expense.vendorName || expense.vendor?.name || vendor?.displayName || vendor?.name || "";
       const customerName = expense.customer_name || expense.customerName || expense.customer?.name || customer?.displayName || customer?.name || "";
       const paidThroughName = expense.paid_through_account_name || expense.paidThrough || paidThroughAccount?.accountName || "";
+      const rawDate = expense.date || expense.expense_date || expense.expenseDate || expense.createdAt || expense.updatedAt || "";
+      const expenseAccountName =
+        expense.account_name ||
+        expense.accountName ||
+        expense.expenseAccount ||
+        expense.account ||
+        expenseAccount?.accountName ||
+        "";
 
       return {
         ...expense,
         id: expense.expense_id || expense._id || expense.id,
-        date: expense.date ? new Date(expense.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "",
-        expenseAccount: expense.account_name || expenseAccount?.accountName || "",
+        date: rawDate ? new Date(rawDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "",
+        expenseAccount: expenseAccountName,
         amount: expense.total ?? expense.amount ?? expense.sub_total ?? 0,
         currency: baseCurrency?.code || expense.currency_code || "USD",
         currencySymbol: (() => {
@@ -459,9 +482,9 @@ export default function Expenses() {
         })(),
         paidThrough: paidThroughName || "",
         vendor: vendorName || "",
-        reference: expense.reference_number,
-        location: expense.location_name || expense.location || "Head Office",
-        customerName: customerName || "",
+        reference: expense.reference_number || expense.referenceNumber || expense.reference || "",
+        location: expense.location_name || expense.locationName || expense.location || "Head Office",
+        customerName: customerName || expense.customer?.displayName || expense.customer?.companyName || expense.customer?.name || "",
         status: (expense.status || "").toUpperCase(),
         notes: expense.description,
         hasAttachment: hasAnyAttachment(expense),
@@ -492,6 +515,17 @@ export default function Expenses() {
   useEffect(() => {
     setCurrencies(Array.isArray(resolveCurrencies) ? resolveCurrencies : []);
   }, [resolveCurrencies]);
+
+  useEffect(() => {
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+    };
+  }, []);
 
   useEffect(() => {
     setIsRefreshing(
@@ -592,7 +626,7 @@ export default function Expenses() {
 
   const handleDeleteSelected = () => {
     if (selectedExpenses.length === 0) {
-      alert("Please select at least one expense to delete.");
+      toast.error("Please select at least one expense to delete.");
       return;
     }
     setShowDeleteModal(true);
@@ -611,8 +645,7 @@ export default function Expenses() {
       );
 
       if (!deleteTargets.length) {
-        setNotification("No valid expense IDs selected for delete." as any);
-        setTimeout(() => setNotification(null), 3000);
+        toast.error("No valid expense IDs selected for delete.");
         setShowDeleteModal(false);
         return;
       }
@@ -642,13 +675,12 @@ export default function Expenses() {
 
       // Show success/error notification
       if (failed === 0) {
-        setNotification(`The selected expense${count > 1 ? "s have" : " has"} been deleted successfully.` as any);
+        toast.success(`The selected expense${count > 1 ? "s have" : " has"} been deleted successfully.`);
       } else if (successful > 0) {
-        setNotification(`${successful} expense${successful > 1 ? "s" : ""} deleted successfully. ${failed} failed.` as any);
+        toast.success(`${successful} expense${successful > 1 ? "s" : ""} deleted successfully. ${failed} failed.`);
       } else {
-        setNotification(`Failed to delete expenses. Please try again.` as any);
+        toast.error(`Failed to delete expenses. Please try again.`);
       }
-      setTimeout(() => setNotification(null), 3000);
 
       setSelectedExpenses([]);
       window.dispatchEvent(new Event("expensesUpdated"));
@@ -656,15 +688,14 @@ export default function Expenses() {
       setShowDeleteModal(false);
     } catch (error) {
       console.error("Error deleting expenses:", error);
-      setNotification("Failed to delete expenses. Please try again." as any);
-      setTimeout(() => setNotification(null), 3000);
+      toast.error("Failed to delete expenses. Please try again.");
       setShowDeleteModal(false);
     }
   };
 
   const handleBulkUpdate = () => {
     if (selectedExpenses.length === 0) {
-      alert("Please select at least one expense to update.");
+      toast.error("Please select at least one expense to update.");
       return;
     }
     setShowBulkUpdateModal(true);
@@ -684,6 +715,13 @@ export default function Expenses() {
     if (!normalized) return "";
     if (normalized === "nonbillable") return "non-billable";
     return normalized;
+  };
+
+  const getExpenseStatusClass = (value: any) => {
+    const status = String(value || "").trim().toLowerCase();
+    if (status === "invoiced") return "text-[#ff4d4f]";
+    if (status === "non-billable" || status === "unbilled" || status === "billable") return "text-[#3f5f8f]";
+    return "text-[#7b88a3]";
   };
 
   const resolveAccountByName = (name: string) => {
@@ -725,12 +763,12 @@ export default function Expenses() {
     const fieldKey = fieldKeyMap[field] || field;
 
     if (!selectedExpenses.length) {
-      alert("Please select at least one expense.");
+      toast.error("Please select at least one expense.");
       return;
     }
 
     if (value === "" || value === null || value === undefined) {
-      alert("Please enter a new value.");
+      toast.error("Please enter a new value.");
       return;
     }
 
@@ -740,7 +778,7 @@ export default function Expenses() {
     );
 
     if (!selectedRows.length) {
-      alert("No valid expenses selected.");
+      toast.error("No valid expenses selected.");
       return;
     }
 
@@ -754,7 +792,7 @@ export default function Expenses() {
     } else if (fieldKey === "amount") {
       const numeric = Number.parseFloat(String(value));
       if (!Number.isFinite(numeric)) {
-        alert("Please enter a valid amount.");
+        toast.error("Please enter a valid amount.");
         return;
       }
       displayValue = numeric;
@@ -1113,7 +1151,7 @@ export default function Expenses() {
 
   const downloadSelectedExpenseAttachmentsAsZip = async (expensesToExport: any[]) => {
     if (!expensesToExport.length) {
-      alert("No expenses selected.");
+      toast.error("No expenses selected.");
       return;
     }
 
@@ -1172,7 +1210,7 @@ export default function Expenses() {
     }
 
     if (addedCount === 0) {
-      alert("No downloadable receipt/document files found for the selected expenses.");
+      toast.error("No downloadable receipt/document files found for the selected expenses.");
       return;
     }
 
@@ -1740,7 +1778,7 @@ export default function Expenses() {
   };
 
   return (
-      <div className="flex flex-col h-[calc(100vh-72px)] w-full bg-[#f6f7fb] font-sans text-gray-800 antialiased relative overflow-hidden">
+      <div className="flex flex-col h-[calc(100vh-72px)] w-full bg-white font-sans text-gray-800 antialiased relative overflow-hidden">
       {/* Header */}
       {selectedExpenses.length === 0 && (
         <div className="flex-none border-b border-gray-100 bg-white px-6 py-6">
@@ -1781,17 +1819,6 @@ export default function Expenses() {
                         />
                       </button>
                     ))}
-                    <div className="my-1 h-px bg-gray-200" />
-                    <button
-                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-[#156372] hover:bg-gray-50"
-                      onClick={() => {
-                        setDropdownOpen(false);
-                        navigate("/expenses/custom-view/new");
-                      }}
-                    >
-                      <Plus size={16} />
-                      New Custom View
-                    </button>
                   </div>
                 )}
               </div>
@@ -1850,18 +1877,18 @@ export default function Expenses() {
                       }}
                     >
                       <button
-                        className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm ${(hoveredMenuItem === 'sort' || sortSubmenuOpen) ? "bg-[#156372] text-white" : "bg-transparent text-gray-900"}`}
+                        className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-colors ${(hoveredMenuItem === 'sort' || sortSubmenuOpen) ? "bg-gray-50 text-gray-900" : "bg-transparent text-gray-900"}`}
                       >
-                        <ArrowUpDown size={16} className={(hoveredMenuItem === 'sort' || sortSubmenuOpen) ? "text-white" : "text-gray-500"} />
+                        <ArrowUpDown size={16} className="text-[#156372]" />
                         <span>Sort by</span>
-                        <ChevronRight size={16} className={`ml-auto ${(hoveredMenuItem === 'sort' || sortSubmenuOpen) ? "text-white" : "text-gray-500"}`} />
+                        <ChevronRight size={16} className="ml-auto text-gray-400" />
                       </button>
                       {sortSubmenuOpen && (
                         <div className="absolute right-full top-0 z-[101] mr-1 min-w-[200px] rounded-lg border border-gray-200 bg-white py-1 shadow-md">
                           {sortOptions.map((option) => (
                             <button
                               key={option}
-                              className={`flex w-full items-center justify-between px-4 py-2 text-left text-sm ${selectedSort === option ? "bg-[#15637210] text-[#156372]" : "text-gray-900 hover:bg-gray-100"}`}
+                              className={`flex w-full items-center justify-between px-4 py-2 text-left text-sm transition-colors ${selectedSort === option ? "bg-[#15637210] text-[#156372]" : "text-gray-900 hover:bg-gray-50"}`}
                               onClick={() => {
                                 setSelectedSort(option);
                                 setSortSubmenuOpen(false);
@@ -1885,18 +1912,18 @@ export default function Expenses() {
                       onMouseLeave={() => setImportSubmenuOpen(false)}
                     >
                       <button
-                        className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm ${(hoveredMenuItem === 'import' || importSubmenuOpen) ? "bg-[#156372] text-white" : "bg-transparent text-gray-900"}`}
+                        className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-colors ${(hoveredMenuItem === 'import' || importSubmenuOpen) ? "bg-gray-50 text-gray-900" : "bg-transparent text-gray-900"}`}
                         onMouseEnter={() => setHoveredMenuItem('import')}
                         onMouseLeave={() => setHoveredMenuItem(null)}
                       >
-                        <Download size={16} className={(hoveredMenuItem === 'import' || importSubmenuOpen) ? "text-white" : "text-gray-500"} />
+                        <Download size={16} className="text-[#156372]" />
                         <span>Import</span>
-                        <ChevronRight size={16} className={`ml-auto ${(hoveredMenuItem === 'import' || importSubmenuOpen) ? "text-white" : "text-gray-500"}`} />
+                        <ChevronRight size={16} className="ml-auto text-gray-400" />
                       </button>
                       {importSubmenuOpen && (
                         <div className="absolute right-full top-0 z-[101] mr-1 min-w-[200px] rounded-lg border border-gray-200 bg-white py-1 shadow-md">
                           <button
-                            className="w-full px-4 py-2 text-left text-[13px] text-gray-900 hover:bg-gray-100"
+                            className="w-full px-4 py-2 text-left text-[13px] text-gray-900 hover:bg-gray-50"
                             onClick={() => {
                               setMoreMenuOpen(false);
                               navigate("/expenses/import");
@@ -1905,13 +1932,13 @@ export default function Expenses() {
                             Import Expenses
                           </button>
                           <button
-                            className="w-full px-4 py-2 text-left text-[13px] text-gray-900 hover:bg-gray-100"
+                            className="w-full px-4 py-2 text-left text-[13px] text-gray-900 hover:bg-gray-50"
                             onClick={() => downloadSampleFile('csv')}
                           >
                             Download Sample CSV
                           </button>
                           <button
-                            className="w-full px-4 py-2 text-left text-[13px] text-gray-900 hover:bg-gray-100"
+                            className="w-full px-4 py-2 text-left text-[13px] text-gray-900 hover:bg-gray-50"
                             onClick={() => downloadSampleFile('xls')}
                           >
                             Download Sample XLS
@@ -1932,16 +1959,16 @@ export default function Expenses() {
                       }}
                     >
                       <button
-                        className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm ${(hoveredMenuItem === 'export' || exportSubmenuOpen) ? "bg-[#156372] text-white" : "bg-transparent text-gray-900"}`}
+                        className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-colors ${(hoveredMenuItem === 'export' || exportSubmenuOpen) ? "bg-gray-50 text-gray-900" : "bg-transparent text-gray-900"}`}
                       >
-                        <Upload size={16} className={(hoveredMenuItem === 'export' || exportSubmenuOpen) ? "text-white" : "text-gray-500"} />
+                        <Upload size={16} className="text-[#156372]" />
                         <span>Export</span>
-                        <ChevronRight size={16} className={`ml-auto ${(hoveredMenuItem === 'export' || exportSubmenuOpen) ? "text-white" : "text-gray-500"}`} />
+                        <ChevronRight size={16} className="ml-auto text-gray-400" />
                       </button>
                       {exportSubmenuOpen && (
                         <div className="absolute right-full top-0 z-[101] mr-1 min-w-[200px] rounded-lg border border-gray-200 bg-white py-1 shadow-md">
                           <button
-                            className="w-full px-4 py-2 text-left text-[13px] text-gray-900 hover:bg-gray-100"
+                            className="w-full px-4 py-2 text-left text-[13px] text-gray-900 hover:bg-gray-50"
                             onClick={() => {
                               setMoreMenuOpen(false);
                               setExportSubmenuOpen(false);
@@ -1952,7 +1979,7 @@ export default function Expenses() {
                             Export Expenses
                           </button>
                           <button
-                            className="w-full px-4 py-2 text-left text-[13px] text-gray-900 hover:bg-gray-100"
+                            className="w-full px-4 py-2 text-left text-[13px] text-gray-900 hover:bg-gray-50"
                             onClick={() => {
                               setMoreMenuOpen(false);
                               setExportSubmenuOpen(false);
@@ -1965,13 +1992,8 @@ export default function Expenses() {
                         </div>
                       )}
                     </div>
-
-
-
-
-
                     <button
-                      className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm ${hoveredMenuItem === 'preferences' ? "bg-[#156372] text-white" : "bg-transparent text-gray-900"}`}
+                      className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-colors ${hoveredMenuItem === 'preferences' ? "bg-gray-50 text-gray-900" : "bg-transparent text-gray-900"}`}
                       onMouseEnter={() => setHoveredMenuItem('preferences')}
                       onMouseLeave={() => setHoveredMenuItem(null)}
                       onClick={() => {
@@ -1979,12 +2001,12 @@ export default function Expenses() {
                         navigate("/settings/expenses");
                       }}
                     >
-                      <Settings size={16} className={hoveredMenuItem === 'preferences' ? "text-white" : "text-gray-500"} />
+                      <Settings size={16} className="text-[#156372]" />
                       <span>Preferences</span>
                     </button>
 
                     <button
-                      className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm ${hoveredMenuItem === 'refresh' ? "bg-[#156372] text-white" : "bg-transparent text-gray-900"}`}
+                      className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-colors ${hoveredMenuItem === 'refresh' ? "bg-gray-50 text-gray-900" : "bg-transparent text-gray-900"}`}
                       onMouseEnter={() => setHoveredMenuItem('refresh')}
                       onMouseLeave={() => setHoveredMenuItem(null)}
                       onClick={() => {
@@ -1993,10 +2015,7 @@ export default function Expenses() {
                       }}
                       disabled={isRefreshing}
                     >
-                      <RotateCw
-                        size={16}
-                        className={`${hoveredMenuItem === 'refresh' ? "text-white" : "text-gray-500"} ${isRefreshing ? "animate-spin" : ""}`}
-                      />
+                      <RotateCw size={16} className={`text-[#156372] ${isRefreshing ? "animate-spin" : ""}`} />
                       <span>Refresh List</span>
                     </button>
                   </div>
@@ -2008,7 +2027,7 @@ export default function Expenses() {
       )}
 
       {/* Main content area */}
-      <div className="flex-1 overflow-auto bg-[#f6f7fb] min-h-0 custom-scrollbar">
+      <div className="flex-1 min-h-0 overflow-hidden bg-white">
         {/* Action Bar - Shows when items are selected */}
         {selectedExpenses.length > 0 && (
           <div className="flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3">
@@ -2055,10 +2074,12 @@ export default function Expenses() {
           </div>
         )}
 
-        <table className="w-full min-w-0 border-collapse table-fixed text-[13px] bg-white" style={{ minWidth: `${tableMinWidth}px` }}>
-            <thead className="sticky top-0 z-20 border-b border-gray-200 bg-[#f6f7fb]">
+        <div className="flex h-full min-h-0 flex-col">
+          <table className="w-full min-w-0 shrink-0 border-collapse table-fixed text-[13px] bg-transparent" style={{ minWidth: `${tableMinWidth}px` }}>
+            {renderTableColGroup()}
+            <thead className="border-b border-gray-200 bg-[#f6f7fb]">
               <tr>
-                <th className="group/header relative px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.select }}>
+                <th className="group/header relative px-4 py-3 text-left text-xs font-semibold uppercase text-[#7b8494]" style={{ width: columnWidths.select }}>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -2086,50 +2107,50 @@ export default function Expenses() {
                   {renderResizeHandle("select")}
                 </th>
                 {isColumnVisible("date") && (
-                <th className="group/header relative whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.date }}>
+                <th className="group/header relative whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-[#7b8494]" style={{ width: columnWidths.date }}>
                   DATE
                   {renderResizeHandle("date")}
                 </th>
                 )}
                 {isColumnVisible("location") && (
-                <th className="group/header relative whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.location }}>
+                <th className="group/header relative whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-[#7b8494]" style={{ width: columnWidths.location }}>
                   LOCATION
                   {renderResizeHandle("location")}
                 </th>
                 )}
                 {isColumnVisible("expenseAccount") && (
-                <th className="group/header relative whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.expenseAccount }}>
+                <th className="group/header relative whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-[#7b8494]" style={{ width: columnWidths.expenseAccount }}>
                   EXPENSE ACCOUNT
                   {renderResizeHandle("expenseAccount")}
                 </th>
                 )}
                 {isColumnVisible("reference") && (
-                <th className="group/header relative whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.reference }}>
+                <th className="group/header relative whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-[#7b8494]" style={{ width: columnWidths.reference }}>
                   REFERENCE#
                   {renderResizeHandle("reference")}
                 </th>
                 )}
                 {isColumnVisible("customerName") && (
-                <th className="group/header relative whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.customerName }}>
+                <th className="group/header relative whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-[#7b8494]" style={{ width: columnWidths.customerName }}>
                   CUSTOMER NAME
                   {renderResizeHandle("customerName")}
                 </th>
                 )}
                 {isColumnVisible("status") && (
-                <th className="group/header relative whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.status }}>
+                <th className="group/header relative whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-[#7b8494]" style={{ width: columnWidths.status }}>
                   STATUS
                   {renderResizeHandle("status")}
                 </th>
                 )}
                 {isColumnVisible("amount") && (
-                <th className="group/header relative whitespace-nowrap px-4 py-3 text-right text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.amount }}>
+                <th className="group/header relative whitespace-nowrap px-4 py-3 text-right text-xs font-semibold uppercase text-[#7b8494]" style={{ width: columnWidths.amount }}>
                   <div className="flex items-center justify-between">
                     AMOUNT
                   </div>
                   {renderResizeHandle("amount")}
                 </th>
                 )}
-                <th className="whitespace-nowrap px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.actions }}>
+                <th className="whitespace-nowrap px-4 py-3 text-center text-xs font-semibold uppercase text-[#7b8494]" style={{ width: columnWidths.actions }}>
                   <button
                     className="mx-auto flex cursor-pointer items-center border-none bg-transparent p-1 text-gray-500"
                     onClick={() => setShowSearchModal(true)}
@@ -2139,7 +2160,12 @@ export default function Expenses() {
                 </th>
               </tr>
             </thead>
-            <tbody>
+          </table>
+
+          <div className="flex-1 min-h-0 overflow-y-auto bg-white custom-scrollbar">
+            <table className="w-full min-w-0 border-collapse table-fixed text-[13px] bg-transparent" style={{ minWidth: `${tableMinWidth}px` }}>
+            {renderTableColGroup()}
+            <tbody className="bg-transparent">
               {isRefreshing ? (
                 // Skeleton loading rows
                 Array.from({ length: 5 }).map((_, index) => (
@@ -2216,12 +2242,14 @@ export default function Expenses() {
                       </span>
                     </td>}
                     {isColumnVisible("reference") && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.reference }}>{expense.reference || ""}</td>}
-                    {isColumnVisible("customerName") && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.customerName }}>{expense.customerName || ""}</td>}
-                    {isColumnVisible("status") && <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-[#7b88a3]" style={{ width: columnWidths.status }}>
-                      {(expense.status || "").toUpperCase()}
+                    {isColumnVisible("customerName") && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.customerName }}>{expense.customerName || expense.customer?.displayName || expense.customer?.companyName || expense.customer?.name || ""}</td>}
+                    {isColumnVisible("status") && <td className={`whitespace-nowrap px-4 py-3 text-sm font-medium ${getExpenseStatusClass(expense.status)}`} style={{ width: columnWidths.status }}>
+                      {(expense.status || "").toUpperCase() || "UNBILLED"}
                     </td>}
                     {isColumnVisible("amount") && <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-900" style={{ width: columnWidths.amount }}>
-                      {expense.currencySymbol || symbol || baseCurrency?.symbol || "KSh"} {parseFloat(expense.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <span className="block text-right">
+                        {expense.currencySymbol || symbol || baseCurrency?.symbol || "KSh"} {parseFloat(expense.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
                     </td>}
                     <td className="whitespace-nowrap px-4 py-3 text-center text-sm text-gray-700" style={{ width: columnWidths.actions }}>
                       {hasAnyAttachment(expense) ? <Paperclip size={14} className="mx-auto" /> : null}
@@ -2236,7 +2264,9 @@ export default function Expenses() {
                 </tr>
               )}
             </tbody>
-        </table>
+            </table>
+          </div>
+        </div>
       </div>
 
       {showCustomizeColumnsModal && (
@@ -2277,7 +2307,7 @@ export default function Expenses() {
             </div>
             <div className="flex items-center gap-3 border-t border-gray-200 px-5 py-4">
               <button
-                className="rounded bg-emerald-500 px-4 py-2 text-sm text-white hover:bg-emerald-600"
+                className="rounded bg-[#156372] px-4 py-2 text-sm text-white hover:bg-[#0f4f5a]"
                 onClick={() => setShowCustomizeColumnsModal(false)}
               >
                 Save

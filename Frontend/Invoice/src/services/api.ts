@@ -635,6 +635,13 @@ const DEFAULT_QUOTE_SETTINGS = {
   customButtons: [] as unknown[],
   relatedLists: [] as unknown[],
 };
+const LOCAL_CREDIT_NOTE_SETTINGS_KEY = "taban_books_settings_credit_notes";
+const DEFAULT_CREDIT_NOTE_SETTINGS = {
+  allowOverrideCostPrices: false,
+  qrCodeEnabled: false,
+  termsConditions: "",
+  customerNotes: "",
+};
 const LOCAL_RECURRING_SETTINGS_KEY = "taban_books_settings_recurring_invoices";
 const LOCAL_VENDORS_KEY = "taban_books_vendors";
 const LOCAL_DOCUMENTS_KEY = "taban_books_documents";
@@ -1503,6 +1510,15 @@ const writeSettingsObject = (key: string, value: any) => {
   } catch {
     // noop
   }
+};
+
+export const getCachedCreditNoteSettings = () =>
+  readSettingsObject(LOCAL_CREDIT_NOTE_SETTINGS_KEY, DEFAULT_CREDIT_NOTE_SETTINGS);
+
+export const setCachedCreditNoteSettings = (value: any) => {
+  const updated = { ...DEFAULT_CREDIT_NOTE_SETTINGS, ...(value || {}) };
+  writeSettingsObject(LOCAL_CREDIT_NOTE_SETTINGS_KEY, updated);
+  return updated;
 };
 
 export const taxesAPI = {
@@ -3389,6 +3405,14 @@ export const settingsAPI = {
     const current = readSettingsObject(LOCAL_GENERAL_SETTINGS_KEY, {});
     const updated = { ...current, ...(data || {}) };
     writeSettingsObject(LOCAL_GENERAL_SETTINGS_KEY, updated);
+    return { success: true, data: updated };
+  },
+  getCreditNoteSettings: async () => {
+    const data = getCachedCreditNoteSettings();
+    return { success: true, data };
+  },
+  updateCreditNoteSettings: async (data: any) => {
+    const updated = setCachedCreditNoteSettings(data);
     return { success: true, data: updated };
   },
   getRecurringInvoiceSettings: async () => {

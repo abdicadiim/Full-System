@@ -1776,7 +1776,7 @@ export default function RecordExpense() {
         }
 
         if (successCount > 0) {
-          alert(`${successCount} expenses saved successfully!${errorMessages.length > 0 ? `\nErrors: ${errorMessages.join(', ')}` : ''}`);
+          toast.success(`${successCount} expenses saved successfully!${errorMessages.length > 0 ? ` Errors: ${errorMessages.join(', ')}` : ''}`);
           window.dispatchEvent(new Event("expensesUpdated"));
 
           if (navigateAway) {
@@ -1784,12 +1784,12 @@ export default function RecordExpense() {
           }
           return true;
         } else {
-          alert(`Failed to save expenses: ${errorMessages.join(', ')}`);
+          toast.error(`Failed to save expenses: ${errorMessages.join(', ')}`);
           return false;
         }
       } catch (error: any) {
         console.error("Error saving bulk expenses:", error);
-        alert(error?.message || "Error creating bulk expenses. Please try again.");
+        toast.error(error?.message || "Error creating bulk expenses. Please try again.");
         return false;
       } finally {
         setSaveLoadingState(null);
@@ -1807,14 +1807,14 @@ export default function RecordExpense() {
       if (rowIndex >= 0) {
         setItemRowTagsOpenIndex(rowIndex);
       }
-      alert("Please fill in all mandatory reporting tags before saving.");
+      toast.error("Please fill in all mandatory reporting tags before saving.");
       setSaveLoadingState(null);
       return false;
     }
 
     // Validate required fields for single expense
     if (!formData.date || !formData.expenseAccount || !formData.amount || !formData.paidThrough) {
-      alert("Please fill in all required fields (Date, Expense Account, Amount, Paid Through)");
+      toast.error("Please fill in all required fields (Date, Expense Account, Amount, Paid Through)");
       setSaveLoadingState(null);
       return false;
     }
@@ -1952,7 +1952,7 @@ export default function RecordExpense() {
         // Generate journal entry for the expense
         await generateJournalEntry(expenseData);
 
-        alert("Expense saved successfully!");
+        toast.success("Expense saved successfully!");
         window.dispatchEvent(new Event("expensesUpdated"));
 
         if (navigateAway) {
@@ -1960,12 +1960,12 @@ export default function RecordExpense() {
         }
         return true;
       } else {
-        alert(response?.message || "Error creating expense");
+        toast.error(response?.message || "Error creating expense");
         return false;
       }
     } catch (error: any) {
       console.error("Error saving expense:", error);
-      alert(error?.message || "Error creating expense. Please try again.");
+      toast.error(error?.message || "Error creating expense. Please try again.");
       return false;
     } finally {
       setSaveLoadingState(null);

@@ -52,8 +52,11 @@ export default function Layout({ children }) {
       "/credit-notes/import-refunds",
       "/credit-notes/custom-view/new"
     ].includes(location.pathname);
+  const isCreditNotesListPage =
+    location.pathname === "/sales/credit-notes" ||
+    location.pathname === "/credit-notes";
   const isSalesReceiptsPage = location.pathname.startsWith("/sales/sales-receipts");
-  const disablePageScroll = isCreditNotesDetailPage || isSalesReceiptsPage;
+  const disablePageScroll = isCreditNotesDetailPage || isCreditNotesListPage || isSalesReceiptsPage;
 
   useEffect(() => {
     const warmSeriesCache = window.setTimeout(() => {

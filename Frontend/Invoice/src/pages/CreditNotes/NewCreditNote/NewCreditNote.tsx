@@ -47,7 +47,7 @@ import {
   AttachedFile
 } from "../../salesModel";
 import { getAllDocuments } from "../../../utils/documentStorage";
-import { customersAPI, salespersonsAPI, itemsAPI, taxesAPI, currenciesAPI, creditNotesAPI, reportingTagsAPI, transactionNumberSeriesAPI, settingsAPI } from "../../../services/api";
+import { customersAPI, salespersonsAPI, itemsAPI, taxesAPI, currenciesAPI, creditNotesAPI, reportingTagsAPI, transactionNumberSeriesAPI, settingsAPI, getCachedCreditNoteSettings } from "../../../services/api";
 import { buildTaxOptionGroups, taxLabel } from "../../../hooks/Taxdropdownstyle";
 
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -60,6 +60,7 @@ const sanitizeNumericInput = (value: string) => {
   const normalizedWhole = whole || "0";
   return `${normalizedWhole}.${decimalParts.join("").replace(/\./g, "")}`;
 };
+const formatMoney = (value: unknown) => Number(value || 0).toFixed(2);
 const blockInvalidNumericKeys = (event: React.KeyboardEvent<HTMLInputElement>) => {
   if (["e", "E", "+", "-"].includes(event.key)) {
     event.preventDefault();
@@ -206,6 +207,117 @@ const resolveItemTaxId = (item: any, taxOptions: any[]): string => {
   }
   return "";
 };
+const toFiniteNumber = (value: any, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+const normalizeCreditNoteItem = (item: any, index: number, taxOptions: any[]): CreditNoteItem => {
+  const rawItem = item?.item;
+  const rawItemObject = rawItem && typeof rawItem === "object" ? rawItem : null;
+  const quantity = toFiniteNumber(item?.quantity ?? item?.qty ?? rawItemObject?.quantity ?? 1, 1) || 1;
+  const rate = toFiniteNumber(
+    item?.rate ??
+      item?.unitPrice ??
+      item?.price ??
+      item?.sellingPrice ??
+      rawItemObject?.rate ??
+      rawItemObject?.price ??
+      0
+  );
+  const discount = toFiniteNumber(item?.discount ?? item?.discountAmount ?? item?.discount_value ?? item?.discountValue ?? 0);
+  const discountType = String(item?.discountType ?? item?.discount_type ?? rawItemObject?.discountType ?? "percent").trim().toLowerCase() === "fixed"
+    ? "fixed"
+    : "percent";
+  const taxId = resolveItemTaxId(item, taxOptions) || String(item?.tax || item?.taxId || item?.taxRateId || item?.salesTaxId || item?.tax_id || "");
+  const taxOption = taxOptions.find((tax) => String(tax?.id) === String(taxId));
+  const taxRate = taxOption ? toFiniteNumber(taxOption.rate, 0) : 0;
+  const lineBase = quantity * rate;
+  const discountAmount = discountType === "fixed" ? discount : (lineBase * discount / 100);
+  const taxableAmount = Math.max(0, lineBase - discountAmount);
+  const computedAmount = taxableAmount + (taxableAmount * taxRate / 100);
+  const rawAmount = item?.amount ?? item?.total ?? item?.lineTotal ?? item?.line_total ?? item?.subTotal ?? item?.subtotal;
+  const itemDetails = String(
+    item?.itemDetails ||
+      item?.name ||
+      item?.description ||
+      item?.label ||
+      (rawItemObject && (rawItemObject?.name || rawItemObject?.itemDetails || rawItemObject?.description || rawItemObject?.label)) ||
+      ""
+  );
+  const normalizedItemId = rawItemObject && typeof rawItemObject === "object"
+    ? String(rawItemObject?._id || rawItemObject?.id || item?.itemId || "")
+    : String(item?.itemId || rawItem || "");
+
+  return {
+    id: Number(item?.id) || Date.now() + index,
+    itemId: normalizedItemId || undefined,
+    itemDetails,
+    account: String(item?.account || item?.accountName || resolveItemAccount(item) || (rawItemObject && typeof rawItemObject === "object" ? resolveItemAccount(rawItemObject) : "") || ""),
+    quantity,
+    rate,
+    discount,
+    discountType,
+    tax: taxId,
+    amount: rawAmount !== undefined && rawAmount !== null && rawAmount !== "" ? toFiniteNumber(rawAmount, computedAmount) : computedAmount,
+    stockOnHand: toFiniteNumber(item?.stockOnHand ?? item?.stockQuantity ?? rawItemObject?.stockOnHand ?? rawItemObject?.quantityOnHand ?? 0),
+    reportingTags: Array.isArray(item?.reportingTags)
+      ? item.reportingTags
+          .map((tag: any) => ({
+            tagId: String(tag?.tagId || tag?.id || tag?._id || tag?.key || ""),
+            value: String(tag?.value || ""),
+            name: String(tag?.name || tag?.label || "")
+          }))
+          .filter((tag: any) => tag.tagId || tag.value || tag.name)
+      : []
+  };
+};
+const normalizeCreditNoteItems = (items: any[], taxOptions: any[]) =>
+  (Array.isArray(items) ? items : []).map((item: any, index: number) => normalizeCreditNoteItem(item, index, taxOptions));
+const buildSelectedItemIds = (items: CreditNoteItem[]) =>
+  items.reduce((acc: Record<string | number, string>, item) => {
+    if (item?.id !== undefined && item?.id !== null && item.itemId) {
+      acc[item.id] = String(item.itemId);
+    }
+    return acc;
+  }, {});
+const resolveCreditNoteReference = (note: any) =>
+  String(
+    note?.referenceNumber ??
+      note?.reference ??
+      note?.referenceNo ??
+      note?.refNumber ??
+      note?.ref ??
+      ""
+  ).trim();
+const resolveCreditNoteSubject = (note: any) =>
+  String(
+    note?.subject ??
+      note?.reason ??
+      note?.memo ??
+      note?.notes ??
+      note?.customerNotes ??
+      ""
+  ).trim();
+const resolveCreditNoteSalesperson = (note: any) => {
+  const salesperson = note?.salesperson;
+  if (salesperson && typeof salesperson === "object") {
+    return String(
+      salesperson?.name ??
+        salesperson?.displayName ??
+        salesperson?.fullName ??
+        salesperson?.salespersonName ??
+        ""
+    ).trim();
+  }
+  return String(
+    note?.salespersonName ??
+      note?.salespersonDisplayName ??
+      note?.salesperson ??
+      ""
+  ).trim();
+};
+const resolveCreditNoteItemRate = (item: any) =>
+  Number(item?.costPrice ?? item?.rate ?? item?.sellingPrice ?? item?.price ?? 0);
 
 export default function NewCreditNote() {
   const navigate = useNavigate();
@@ -214,6 +326,7 @@ export default function NewCreditNote() {
   const { id } = useParams();
   const isEditMode = !!id;
   const clonedDataFromState = location.state?.clonedData || null;
+  const creditNoteFromState = location.state?.creditNote || null;
 
   const [formData, setFormData] = useState({
     customerName: "",
@@ -247,6 +360,8 @@ export default function NewCreditNote() {
   const hasAppliedCloneRef = useRef(false);
   const [saveLoading, setSaveLoading] = useState<null | "draft" | "open">(null);
   const [enabledSettings, setEnabledSettings] = useState<any>(null);
+  const [creditNoteSettings, setCreditNoteSettings] = useState<any>(() => getCachedCreditNoteSettings());
+  const allowOverrideCostPrices = Boolean(creditNoteSettings?.allowOverrideCostPrices);
   const discountMode = enabledSettings?.discountSettings?.discountType ?? "transaction";
   const showTransactionDiscount = discountMode === "transaction";
   const showShippingCharges = enabledSettings?.chargeSettings?.shippingCharges !== false;
@@ -360,6 +475,15 @@ export default function NewCreditNote() {
   const [selectedDocuments, setSelectedDocuments] = useState<any[]>([]);
   const [selectedInbox, setSelectedInbox] = useState("files");
 
+  useEffect(() => {
+    if (!isBulkAddModalOpen || typeof document === "undefined") return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isBulkAddModalOpen]);
+
   const customerDropdownRef = useRef<HTMLDivElement>(null);
   const salespersonDropdownRef = useRef<HTMLDivElement>(null);
   const datePickerRef = useRef<HTMLDivElement>(null);
@@ -387,17 +511,7 @@ export default function NewCreditNote() {
     };
 
     const mappedItems = Array.isArray(cloned.items) && cloned.items.length > 0
-      ? cloned.items.map((item: any, index: number) => ({
-        id: Date.now() + index,
-        itemId: item.itemId || item.id || item._id || undefined,
-        itemDetails: item.itemDetails || item.name || item.description || "",
-        quantity: Number(item.quantity ?? 1) || 1,
-        rate: Number(item.rate ?? item.price ?? 0) || 0,
-        tax: String(item.tax || item.taxId || ""),
-        amount: Number(item.amount ?? 0) || 0,
-        stockOnHand: Number(item.stockOnHand ?? item.stockQuantity ?? 0) || 0,
-        reportingTags: Array.isArray(item.reportingTags) ? item.reportingTags : []
-      }))
+      ? normalizeCreditNoteItems(cloned.items, taxOptions)
       : undefined;
 
     setFormData(prev => ({
@@ -427,6 +541,9 @@ export default function NewCreditNote() {
       termsAndConditions: cloned.termsAndConditions || cloned.terms || prev.termsAndConditions,
       documents: []
     }));
+    if (mappedItems?.length) {
+      setSelectedItemIds(buildSelectedItemIds(mappedItems));
+    }
   }, [clonedDataFromState, isEditMode]);
 
   const handleCustomerSearch = () => {
@@ -472,6 +589,7 @@ export default function NewCreditNote() {
         let loadedCustomers: any[] = [];
         let loadedSalespersons: any[] = [];
         let loadedTaxes: any[] = [];
+        let loadedCreditNoteSettings = getCachedCreditNoteSettings();
         const customersPromise = customersAPI.getAll().catch((error) => {
           console.error("Error loading customers:", error);
           return null;
@@ -492,6 +610,10 @@ export default function NewCreditNote() {
           console.error("Error loading general settings:", error);
           return null;
         });
+        const creditNoteSettingsPromise = settingsAPI.getCreditNoteSettings().catch((error) => {
+          console.error("Error loading credit note settings:", error);
+          return null;
+        });
         const itemsPromise = itemsAPI.getAll().catch((error) => {
           console.error("Error loading items:", error);
           return null;
@@ -510,7 +632,11 @@ export default function NewCreditNote() {
           console.error("[NewCreditNote] error loading invoice for prefill", error);
           return null;
         }) : Promise.resolve(null);
-        const existingCreditNotePromise = isEditMode && id ? getCreditNoteById(id).catch((error) => {
+        const existingCreditNotePromise = isEditMode && id ? Promise.resolve(
+          creditNoteFromState && String((creditNoteFromState as any)?.id || (creditNoteFromState as any)?._id || "") === String(id)
+            ? creditNoteFromState
+            : null
+        ).then((stateCreditNote) => stateCreditNote || getCreditNoteById(id)).catch((error) => {
           console.error("Error fetching credit note:", error);
           return null;
         }) : Promise.resolve(null);
@@ -565,6 +691,11 @@ export default function NewCreditNote() {
           if (generalSettingsResponse?.success && generalSettingsResponse.data) {
             setEnabledSettings(generalSettingsResponse.data);
           }
+          const creditNoteSettingsResponse = await creditNoteSettingsPromise;
+          if (creditNoteSettingsResponse?.success && creditNoteSettingsResponse.data) {
+            loadedCreditNoteSettings = creditNoteSettingsResponse.data;
+            setCreditNoteSettings(creditNoteSettingsResponse.data);
+          }
         } catch (error) {
           console.error('Error loading general settings:', error);
         }
@@ -609,7 +740,8 @@ export default function NewCreditNote() {
                 id: item._id || item.id,
                 name: item.name || "",
                 sku: item.sku || "",
-                rate: item.sellingPrice || item.costPrice || item.rate || 0,
+                costPrice: Number(item.costPrice || 0),
+                rate: item.costPrice || item.sellingPrice || item.rate || 0,
                 stockOnHand: item.stockOnHand || item.quantityOnHand || 0,
                 unit: item.unit || item.unitOfMeasure || "pcs",
                 taxId: item.taxId || item.tax || item.salesTaxId || item.taxRateId || "",
@@ -651,6 +783,12 @@ export default function NewCreditNote() {
           } catch (error) {
             console.error("Error loading next credit note number:", error);
           }
+
+          setFormData(prev => ({
+            ...prev,
+            termsAndConditions: prev.termsAndConditions || loadedCreditNoteSettings.termsConditions || "",
+            customerNotes: prev.customerNotes || loadedCreditNoteSettings.customerNotes || ""
+          }));
         }
 
         // If navigated from an Invoice (query param invoiceId), prefill credit note fields
@@ -690,8 +828,8 @@ export default function NewCreditNote() {
                 roundOff: invoiceData.roundOff || invoiceData.round_off || 0,
                 total: invoiceData.total || invoiceData.amount || 0,
                 currency: invoiceData.currency || prev.currency,
-                customerNotes: invoiceData.customerNotes || prev.customerNotes,
-                termsAndConditions: (invoiceData as any).terms || invoiceData.termsAndConditions || prev.termsAndConditions
+                customerNotes: invoiceData.customerNotes || (loadedCreditNoteSettings.customerNotes || prev.customerNotes),
+                termsAndConditions: (invoiceData as any).terms || invoiceData.termsAndConditions || loadedCreditNoteSettings.termsConditions || prev.termsAndConditions
               }));
 
               // set selected customer if available — if not found, set a minimal selectedCustomer so the UI shows name
@@ -720,47 +858,14 @@ export default function NewCreditNote() {
           try {
             const existing = await existingCreditNotePromise;
             if (existing) {
-              const normalizedReference = String(
-                (existing as any)?.referenceNumber ??
-                (existing as any)?.reference ??
-                (existing as any)?.referenceNo ??
-                (existing as any)?.refNumber ??
-                ""
-              ).trim();
+              const normalizedReference = resolveCreditNoteReference(existing);
+              const normalizedSubject = resolveCreditNoteSubject(existing);
+              const normalizedSalespersonName = resolveCreditNoteSalesperson(existing);
 
-              const mappedItems = (Array.isArray((existing as any)?.items) ? (existing as any).items : []).map((item: any, index: number) => {
-                const quantity = Number(item?.quantity ?? item?.qty ?? 1) || 1;
-                const rate = Number(item?.rate ?? item?.unitPrice ?? item?.price ?? 0) || 0;
-                const rawItem = item?.item;
-                const normalizedItemId = rawItem && typeof rawItem === "object"
-                  ? String(rawItem?._id || rawItem?.id || item?.itemId || "")
-                  : String(item?.itemId || rawItem || "");
-                const itemDetails = String(
-                  item?.itemDetails ||
-                  item?.name ||
-                  item?.description ||
-                  (rawItem && typeof rawItem === "object" ? rawItem?.name || rawItem?.itemDetails || "" : "")
-                );
-                const taxId = resolveItemTaxId(item, loadedTaxes.length ? loadedTaxes : taxOptions);
-                const amount = Number(item?.amount ?? item?.total ?? (quantity * rate)) || 0;
-                const account = String(
-                  item?.account ||
-                  resolveItemAccount(item) ||
-                  (rawItem && typeof rawItem === "object" ? resolveItemAccount(rawItem) : "")
-                );
-
-                return {
-                  id: Number(item?.id) || Date.now() + index,
-                  itemId: normalizedItemId || undefined,
-                  itemDetails,
-                  account,
-                  quantity,
-                  rate,
-                  tax: taxId,
-                  amount,
-                  reportingTags: Array.isArray(item?.reportingTags) ? item.reportingTags : []
-                };
-              });
+              const mappedItems = normalizeCreditNoteItems(
+                Array.isArray((existing as any)?.items) ? (existing as any).items : [],
+                loadedTaxes.length ? loadedTaxes : taxOptions
+              );
 
               const mappedDocuments: CreditNoteDocument[] = (Array.isArray((existing as any)?.attachedFiles) ? (existing as any).attachedFiles : []).map((file: any, index: number) => ({
                 id: Number(file?.id) || Date.now() + index,
@@ -781,11 +886,8 @@ export default function NewCreditNote() {
                 referenceNumber: normalizedReference || prev.referenceNumber,
                 creditNoteDate: (existing as any).date ? formatDate((existing as any).date) : prev.creditNoteDate,
                 accountsReceivable: (existing as any).accountsReceivable || prev.accountsReceivable,
-                salesperson:
-                  typeof (existing as any).salesperson === "object"
-                    ? ((existing as any).salesperson?.name || "")
-                    : ((existing as any).salesperson || ""),
-                subject: (existing as any).subject || "",
+                salesperson: normalizedSalespersonName || prev.salesperson,
+                subject: normalizedSubject || prev.subject,
                 items: mappedItems.length ? mappedItems : prev.items,
                 subTotal: Number((existing as any).subtotal ?? (existing as any).subTotal ?? prev.subTotal) || 0,
                 discount: Number((existing as any).discount ?? prev.discount) || 0,
@@ -800,10 +902,13 @@ export default function NewCreditNote() {
                 roundOff: Number((existing as any).roundOff ?? (existing as any).round_off ?? prev.roundOff) || 0,
                 total: Number((existing as any).total ?? (existing as any).amount ?? prev.total) || 0,
                 currency: (existing as any).currency || prev.currency,
-                customerNotes: (existing as any).customerNotes || (existing as any).notes || "",
-                termsAndConditions: (existing as any).termsAndConditions || (existing as any).terms || "",
+                customerNotes: (existing as any).customerNotes || (existing as any).notes || loadedCreditNoteSettings.customerNotes || "",
+                termsAndConditions: (existing as any).termsAndConditions || (existing as any).terms || loadedCreditNoteSettings.termsConditions || "",
                 documents: mappedDocuments
               }));
+              if (mappedItems.length) {
+                setSelectedItemIds(buildSelectedItemIds(mappedItems));
+              }
 
               const customerId = String(
                 (typeof existing.customer === "object" ? (existing.customer as any)?._id || (existing.customer as any)?.id : existing.customer) ||
@@ -820,15 +925,20 @@ export default function NewCreditNote() {
                 } as any);
               }
 
-              const salespersonName = String(
-                typeof (existing as any).salesperson === "object"
-                  ? ((existing as any).salesperson?.name || "")
-                  : ((existing as any).salesperson || "")
-              ).trim().toLowerCase();
-              if (salespersonName) {
-                const sp = loadedSalespersons.find((s: any) => String(s?.name || "").trim().toLowerCase() === salespersonName);
-                if (sp) setSelectedSalesperson(sp);
-              }
+              const salespersonId = String(
+                (typeof (existing as any).salesperson === "object"
+                  ? ((existing as any).salesperson?._id || (existing as any).salesperson?.id || "")
+                  : "") ||
+                (existing as any).salespersonId ||
+                ""
+              ).trim();
+              const salespersonName = String(normalizedSalespersonName).trim().toLowerCase();
+              const sp = loadedSalespersons.find((s: any) => {
+                const currentId = String(s?._id || s?.id || "").trim();
+                const currentName = String(s?.name || "").trim().toLowerCase();
+                return (salespersonId && currentId === salespersonId) || (salespersonName && currentName === salespersonName);
+              });
+              if (sp) setSelectedSalesperson(sp);
             }
           } catch (error) {
             console.error("Error fetching credit note:", error);
@@ -1255,6 +1365,9 @@ export default function NewCreditNote() {
   };
 
   const handleItemChange = (itemId: number, field: string, value: any) => {
+    if (field === "rate" && !allowOverrideCostPrices) {
+      return;
+    }
     setFormData(prev => {
       const updatedItems = prev.items.map(item => {
         if (item.id === itemId) {
@@ -1360,7 +1473,7 @@ export default function NewCreditNote() {
       });
       const updatedItems = prev.items.map(item => {
         if (item.id !== itemId) return item;
-        const nextRate = Number(pItem.rate ?? 0);
+        const nextRate = resolveCreditNoteItemRate(pItem);
         const nextQty = Number(item.quantity ?? 1) || 1;
         const nextAccount = resolveItemAccount(pItem) || item.account;
         const nextTaxId = ensuredTaxId || resolveItemTaxId(pItem, taxOptions);
@@ -1569,7 +1682,7 @@ export default function NewCreditNote() {
     setFormData(prev => {
       const newItems = bulkSelectedItems.map((selectedItem, index) => {
         const quantity = selectedItem.quantity || 1;
-        const rate = selectedItem.rate || 0;
+        const rate = resolveCreditNoteItemRate(selectedItem);
         return {
           id: Date.now() + index,
           itemId: selectedItem._id || selectedItem.id,
@@ -1739,6 +1852,11 @@ export default function NewCreditNote() {
         total: formData.total || 0,
         currency: formData.currency || "USD",
         status: status,
+        subject: formData.subject || "",
+        termsAndConditions: formData.termsAndConditions || "",
+        terms: formData.termsAndConditions || "",
+        salesperson: selectedSalesperson?._id || selectedSalesperson?.id || formData.salesperson || "",
+        salespersonId: selectedSalesperson?._id || selectedSalesperson?.id || "",
         notes: formData.customerNotes || ""
       };
 
@@ -2494,7 +2612,12 @@ export default function NewCreditNote() {
                             onKeyDown={blockInvalidNumericKeys}
                             value={item.rate || ""}
                             onChange={(e) => handleItemChange(item.id, "rate", sanitizeNumericInput(e.target.value))}
-                            className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-none focus:outline-none focus:border-[#3f83f8]"
+                            readOnly={!allowOverrideCostPrices}
+                            className={`h-9 w-full rounded-md border px-3 text-sm shadow-none focus:outline-none focus:border-[#3f83f8] ${
+                              allowOverrideCostPrices
+                                ? "border-slate-200 bg-white text-slate-700"
+                                : "border-slate-200 bg-gray-50 text-slate-500 cursor-not-allowed"
+                            }`}
                             placeholder="0.00"
                             min="0"
                             step="0.01"
@@ -2944,7 +3067,7 @@ export default function NewCreditNote() {
               <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-5 shadow-sm">
                 <div className="flex justify-between items-center text-sm">
                   <span className="font-semibold text-gray-600">Sub Total</span>
-                  <span className="font-semibold text-gray-900">{formData.subTotal.toFixed(2)}</span>
+                  <span className="font-semibold text-gray-900">{formatMoney(formData.subTotal)}</span>
                 </div>
 
                 {showTransactionDiscount && (
@@ -2994,7 +3117,9 @@ export default function NewCreditNote() {
                         placeholder="0"
                         onChange={(e) => handleSummaryChange("shippingCharges", sanitizeNumericInput(e.target.value))}
                       />
-                      <span className="min-w-[70px] text-right text-sm text-gray-900">{(formData.shippingCharges || 0).toFixed(2)}</span>
+                      <span className="min-w-[70px] text-right text-sm text-gray-900">
+                        {formatMoney(formData.shippingCharges)}
+                      </span>
                     </div>
                   </div>
 
@@ -3046,7 +3171,7 @@ export default function NewCreditNote() {
                             </div>
                           )}
                         </div>
-                        <span className="min-w-[70px] text-right text-sm text-gray-900">{shippingChargeTaxAmount.toFixed(2)}</span>
+                        <span className="min-w-[70px] text-right text-sm text-gray-900">{formatMoney(shippingChargeTaxAmount)}</span>
                       </div>
                     </div>
                   )}
@@ -3068,7 +3193,7 @@ export default function NewCreditNote() {
                       placeholder="0"
                       onChange={(e) => handleSummaryChange("adjustment", sanitizeNumericInput(e.target.value))}
                     />
-                    <span className="min-w-[70px] text-right text-sm text-gray-900">{(formData.adjustment || 0).toFixed(2)}</span>
+                    <span className="min-w-[70px] text-right text-sm text-gray-900">{formatMoney(formData.adjustment)}</span>
                   </div>
                 </div>
                 )}
@@ -3078,12 +3203,12 @@ export default function NewCreditNote() {
                     {Object.entries(taxSummary).map(([taxName, amount]) => (
                       <div key={taxName} className="flex justify-between items-center text-sm">
                         <span className="text-gray-600">{taxName}</span>
-                        <span className="text-gray-900">{amount.toFixed(2)}</span>
+                        <span className="text-gray-900">{formatMoney(amount)}</span>
                       </div>
                     ))}
                     <div className="flex justify-between items-center text-sm font-semibold">
                       <span className="text-gray-700">Total Tax Amount</span>
-                      <span className="text-gray-900">{totalTaxAmount.toFixed(2)}</span>
+                      <span className="text-gray-900">{formatMoney(totalTaxAmount)}</span>
                     </div>
                   </div>
                 )}
@@ -3091,7 +3216,7 @@ export default function NewCreditNote() {
                 <div className="pt-4 border-t border-gray-200">
                   <div className="flex justify-between items-center">
                     <span className="text-base font-bold text-gray-900">Total ({formData.currency})</span>
-                    <span className="text-base font-bold text-gray-900">{formData.total.toFixed(2)}</span>
+                    <span className="text-base font-bold text-gray-900">{formatMoney(formData.total)}</span>
                   </div>
                 </div>
               </div>
@@ -3790,10 +3915,9 @@ export default function NewCreditNote() {
       }
 
       {/* Add Items in Bulk Modal */}
-      {
-        isBulkAddModalOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={handleCancelBulkAdd}>
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      {isBulkAddModalOpen && typeof document !== "undefined" && document.body && createPortal(
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 px-4 py-6" onClick={handleCancelBulkAdd}>
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between p-4 border-b border-gray-200">
                 <h2 className="text-xl font-semibold text-gray-900">Add Items in Bulk</h2>
                 <button
@@ -3924,10 +4048,10 @@ export default function NewCreditNote() {
                   Cancel
                 </button>
               </div>
-            </div>
           </div>
-        )
-      }
+        </div>,
+        document.body
+      )}
 
       {/* Advanced Customer Search Modal */}
       {

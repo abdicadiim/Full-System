@@ -6,6 +6,7 @@ import BulkUpdateModal from "../shared/BulkUpdateModal";
 import DeleteConfirmationModal from "../shared/DeleteConfirmationModal";
 import ExportExpenses from "./ExportExpenses";
 import JSZip from "jszip";
+import { toast } from "react-toastify";
 import {
   expensesAPI,
   vendorsAPI,
@@ -394,6 +395,17 @@ export default function Expenses() {
   }, [refreshData]);
 
   useEffect(() => {
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
     if (expensesQuery.isLoading) {
       setIsLoading(true);
       return;
@@ -433,7 +445,7 @@ export default function Expenses() {
 
   const handleDeleteSelected = () => {
     if (selectedExpenses.length === 0) {
-      alert("Please select at least one expense to delete.");
+      toast.error("Please select at least one expense to delete.");
       return;
     }
     setShowDeleteModal(true);
@@ -452,8 +464,7 @@ export default function Expenses() {
       );
 
       if (!deleteTargets.length) {
-        setNotification("No valid expense IDs selected for delete." as any);
-        setTimeout(() => setNotification(null), 3000);
+        toast.error("No valid expense IDs selected for delete.");
         setShowDeleteModal(false);
         return;
       }
@@ -483,13 +494,12 @@ export default function Expenses() {
 
       // Show success/error notification
       if (failed === 0) {
-        setNotification(`The selected expense${count > 1 ? "s have" : " has"} been deleted successfully.` as any);
+        toast.success(`The selected expense${count > 1 ? "s have" : " has"} been deleted successfully.`);
       } else if (successful > 0) {
-        setNotification(`${successful} expense${successful > 1 ? "s" : ""} deleted successfully. ${failed} failed.` as any);
+        toast.success(`${successful} expense${successful > 1 ? "s" : ""} deleted successfully. ${failed} failed.`);
       } else {
-        setNotification(`Failed to delete expenses. Please try again.` as any);
+        toast.error(`Failed to delete expenses. Please try again.`);
       }
-      setTimeout(() => setNotification(null), 3000);
 
       setSelectedExpenses([]);
       window.dispatchEvent(new Event("expensesUpdated"));
@@ -497,15 +507,14 @@ export default function Expenses() {
       setShowDeleteModal(false);
     } catch (error) {
       console.error("Error deleting expenses:", error);
-      setNotification("Failed to delete expenses. Please try again." as any);
-      setTimeout(() => setNotification(null), 3000);
+      toast.error("Failed to delete expenses. Please try again.");
       setShowDeleteModal(false);
     }
   };
 
   const handleBulkUpdate = () => {
     if (selectedExpenses.length === 0) {
-      alert("Please select at least one expense to update.");
+      toast.error("Please select at least one expense to update.");
       return;
     }
     setShowBulkUpdateModal(true);
@@ -525,6 +534,13 @@ export default function Expenses() {
     if (!normalized) return "";
     if (normalized === "nonbillable") return "non-billable";
     return normalized;
+  };
+
+  const getExpenseStatusClass = (value: any) => {
+    const status = String(value || "").trim().toLowerCase();
+    if (status === "invoiced") return "text-[#ff4d4f]";
+    if (status === "non-billable" || status === "unbilled" || status === "billable") return "text-[#3f5f8f]";
+    return "text-[#7b88a3]";
   };
 
   const resolveAccountByName = (name: string) => {
@@ -566,12 +582,12 @@ export default function Expenses() {
     const fieldKey = fieldKeyMap[field] || field;
 
     if (!selectedExpenses.length) {
-      alert("Please select at least one expense.");
+      toast.error("Please select at least one expense.");
       return;
     }
 
     if (value === "" || value === null || value === undefined) {
-      alert("Please enter a new value.");
+      toast.error("Please enter a new value.");
       return;
     }
 
@@ -581,7 +597,7 @@ export default function Expenses() {
     );
 
     if (!selectedRows.length) {
-      alert("No valid expenses selected.");
+      toast.error("No valid expenses selected.");
       return;
     }
 
@@ -595,7 +611,7 @@ export default function Expenses() {
     } else if (fieldKey === "amount") {
       const numeric = Number.parseFloat(String(value));
       if (!Number.isFinite(numeric)) {
-        alert("Please enter a valid amount.");
+        toast.error("Please enter a valid amount.");
         return;
       }
       displayValue = numeric;
@@ -954,7 +970,7 @@ export default function Expenses() {
 
   const downloadSelectedExpenseAttachmentsAsZip = async (expensesToExport: any[]) => {
     if (!expensesToExport.length) {
-      alert("No expenses selected.");
+      toast.error("No expenses selected.");
       return;
     }
 
@@ -1013,7 +1029,7 @@ export default function Expenses() {
     }
 
     if (addedCount === 0) {
-      alert("No downloadable receipt/document files found for the selected expenses.");
+      toast.error("No downloadable receipt/document files found for the selected expenses.");
       return;
     }
 
@@ -2059,12 +2075,14 @@ export default function Expenses() {
                       </span>
                     </td>}
                     {isColumnVisible("reference") && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.reference }}>{expense.reference || ""}</td>}
-                    {isColumnVisible("customerName") && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.customerName }}>{expense.customerName || ""}</td>}
-                    {isColumnVisible("status") && <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-[#7b88a3]" style={{ width: columnWidths.status }}>
-                      {(expense.status || "").toUpperCase()}
+                    {isColumnVisible("customerName") && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.customerName }}>{expense.customerName || expense.customer?.displayName || expense.customer?.companyName || expense.customer?.name || ""}</td>}
+                    {isColumnVisible("status") && <td className={`whitespace-nowrap px-4 py-3 text-sm font-medium ${getExpenseStatusClass(expense.status)}`} style={{ width: columnWidths.status }}>
+                      {(expense.status || "").toUpperCase() || "UNBILLED"}
                     </td>}
                     {isColumnVisible("amount") && <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-900" style={{ width: columnWidths.amount }}>
-                      {expense.currencySymbol || symbol || baseCurrency?.symbol || "KSh"} {parseFloat(expense.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <span className="block text-right">
+                        {expense.currencySymbol || symbol || baseCurrency?.symbol || "KSh"} {parseFloat(expense.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
                     </td>}
                     <td className="whitespace-nowrap px-4 py-3 text-center text-sm text-gray-700" style={{ width: columnWidths.actions }}>
                       {hasAnyAttachment(expense) ? <Paperclip size={14} className="mx-auto" /> : null}

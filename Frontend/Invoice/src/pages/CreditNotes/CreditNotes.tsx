@@ -7,6 +7,7 @@ import { getCreditNotes, getCustomViews, deleteCustomView, getCreditNoteById, up
 import type { CreditNote as SalesCreditNote } from "../salesModel";
 import FieldCustomization from "../shared/FieldCustomization";
 import CreditNotesCustomizeColumnsModal, { CreditNotesColumnOption } from "./CreditNotesCustomizeColumnsModal";
+import CreditNoteDeleteModal from "./CreditNoteDeleteModal";
 import { settingsAPI, currenciesAPI } from "../../services/api";
 import { downloadCreditNotesPdf } from "./creditNotePdf";
 import {
@@ -673,9 +674,12 @@ export default function CreditNotes() {
   const getCreditNoteReferenceNumber = (note: any) =>
     String(
       note?.referenceNumber ??
+      note?.referenceNumberCreditNote ??
+      note?.referenceNoCreditNote ??
       note?.reference ??
       note?.referenceNo ??
       note?.refNumber ??
+      note?.reference_number ??
       note?.ref ??
       ""
     ).trim();
@@ -973,8 +977,12 @@ export default function CreditNotes() {
         selectedNotes.map((note) => getCreditNoteById(note.id))
       );
       const fullNotes = noteResults
-        .filter((result): result is PromiseFulfilledResult<SalesCreditNote | null> => result.status === "fulfilled" && Boolean(result.value))
-        .map((result) => result.value as SalesCreditNote);
+        .map((result, index) => {
+          const fetched = result.status === "fulfilled" ? result.value : null;
+          const fallback = selectedNotes[index];
+          return fetched ? ({ ...fallback, ...fetched, customerName: getCreditNoteCustomerName(fetched || fallback), referenceNumber: getCreditNoteReferenceNumber(fetched || fallback) } as SalesCreditNote) : fallback;
+        })
+        .filter(Boolean) as SalesCreditNote[];
 
       if (fullNotes.length === 0) {
         toast("Unable to load the selected credit notes for download.");
@@ -1169,10 +1177,10 @@ export default function CreditNotes() {
                 {isMoreMenuOpen && (
                   <div className="absolute top-full right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[220px] z-[1000] overflow-visible py-1">
                     {/* Sort by */}
-                    <div className="relative flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-all text-sm text-gray-700 group hover:bg-[#3b82f6] hover:text-white">
-                      <ArrowUpDown size={16} className="text-[#156372] flex-shrink-0 group-hover:text-white" />
+                    <div className="relative flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-all text-sm text-gray-700 group hover:bg-gray-50 hover:text-gray-900">
+                      <ArrowUpDown size={16} className="text-[#156372] flex-shrink-0 group-hover:text-[#156372]" />
                       <span className="flex-1 font-medium text-[13px]">Sort by</span>
-                      <ChevronRight size={16} className="text-gray-400 flex-shrink-0 group-hover:text-white" />
+                      <ChevronRight size={16} className="text-gray-400 flex-shrink-0 group-hover:text-gray-500" />
 
                       {/* Sort by Submenu */}
                       <div className="absolute top-0 right-full mr-1.5 w-[220px] bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-[99999] pointer-events-none opacity-0 translate-x-2.5 transition-all group-hover:pointer-events-auto group-hover:opacity-100 group-hover:translate-x-0">
@@ -1406,235 +1414,223 @@ export default function CreditNotes() {
         </div>
       )}
 
-      {/* Delete Credit Notes Confirmation Modal */}
-      {isDeleteModalOpen && (
-        <div
-          className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16 overflow-y-auto"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !isDeletingCreditNotes) {
-              setIsDeleteModalOpen(false);
-            }
-          }}
-        >
-          <div className="w-full max-w-md mx-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-red-100 text-[12px] font-bold text-red-600">
-                !
-              </div>
-              <h3 className="flex-1 text-[15px] font-semibold text-slate-800">
-                Delete {selectedCreditNotes.length > 1 ? `${selectedCreditNotes.length} credit notes?` : "credit note?"}
-              </h3>
-              <button
-                type="button"
-                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                onClick={() => setIsDeleteModalOpen(false)}
-                aria-label="Close delete modal"
-                disabled={isDeletingCreditNotes}
-              >
-                <X size={14} />
-              </button>
-            </div>
-            <div className="px-5 py-3 text-[13px] text-slate-600">
-              Are you sure you want to delete {selectedCreditNotes.length > 1 ? `these ${selectedCreditNotes.length} credit notes` : "this credit note"}? This action cannot be undone.
-            </div>
-            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
-              <button
-                type="button"
-                className="rounded-md bg-red-600 px-4 py-1.5 text-[12px] text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-                onClick={handleConfirmDelete}
-                disabled={isDeletingCreditNotes}
-              >
-                {isDeletingCreditNotes ? "Deleting..." : "Delete"}
-              </button>
-              <button
-                type="button"
-                className="rounded-md border border-slate-300 px-4 py-1.5 text-[12px] text-slate-700 transition-colors hover:bg-slate-50"
-                onClick={() => setIsDeleteModalOpen(false)}
-                disabled={isDeletingCreditNotes}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CreditNoteDeleteModal
+        isOpen={isDeleteModalOpen}
+        title={selectedCreditNotes.length > 1 ? `Delete ${selectedCreditNotes.length} credit notes?` : "Delete credit note?"}
+        message={`Are you sure you want to delete ${selectedCreditNotes.length > 1 ? `these ${selectedCreditNotes.length} credit notes` : "this credit note"}? This action cannot be undone.`}
+        confirmText={isDeletingCreditNotes ? "Deleting..." : "Delete"}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={handleConfirmDelete}
+        confirmDisabled={isDeletingCreditNotes}
+      />
 
-      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-      <div className="relative">
-
-        <div className="w-full bg-white overflow-hidden">
-          <div className="w-full overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead className="sticky top-0 z-10 bg-[#f6f7fb] border-b border-[#e6e9f2]">
-                <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
-                  <th className="px-4 py-3 w-16 min-w-[64px]">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setIsCustomizeColumnsOpen(true);
-                        }}
-                        className="h-6 w-6 flex items-center justify-center rounded border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
-                        title="Customize Columns"
-                      >
-                        <SlidersHorizontal size={13} className="text-[#1b5e6a]" />
-                      </button>
-                      <div className="h-5 w-px bg-gray-200" />
-                      <button
-                        className="h-4 w-4 flex items-center justify-center hover:bg-gray-200 rounded transition-colors"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSelectAll();
-                        }}
-                      >
-                        {filteredCreditNotes.length > 0 && filteredCreditNotes.every((note) => selectedCreditNotes.includes(note.id)) ? (
-                          <CheckSquare size={16} fill="#6b7280" color="#6b7280" />
-                        ) : (
-                          <Square size={16} className="text-gray-400" />
-                        )}
-                      </button>
-                    </div>
-                  </th>
-                  {isColumnVisible("date") && <th className="px-4 py-3 text-left">
-                    <button className="flex items-center gap-2 hover:text-blue-600 transition-colors">
-                        DATE
-                      </button>
-                  </th>}
-                  {isColumnVisible("location") && <th className="px-4 py-3 text-left">LOCATION</th>}
-                  {isColumnVisible("creditNoteNumber") && <th className="px-4 py-3 text-left">
-                    <button className="flex items-center gap-2 hover:text-blue-600 transition-colors">
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="h-full min-h-0 flex flex-col">
+          <div className="shrink-0 w-full bg-white border-b border-[#e6e9f2] overflow-hidden">
+            <div className="w-full overflow-x-auto">
+              <table className="w-full min-w-[1180px] text-left border-collapse table-fixed">
+                <colgroup>
+                  <col className="w-16" />
+                  {isColumnVisible("date") && <col className="w-[130px]" />}
+                  {isColumnVisible("location") && <col className="w-[120px]" />}
+                  {isColumnVisible("creditNoteNumber") && <col className="w-[150px]" />}
+                  {isColumnVisible("referenceNumber") && <col className="w-[150px]" />}
+                  {isColumnVisible("customerName") && <col className="w-[180px]" />}
+                  {isColumnVisible("invoiceNumber") && <col className="w-[120px]" />}
+                  {isColumnVisible("status") && <col className="w-[110px]" />}
+                  {isColumnVisible("amount") && <col className="w-[120px]" />}
+                  {isColumnVisible("balance") && <col className="w-[120px]" />}
+                  {isColumnVisible("salesPerson") && <col className="w-[150px]" />}
+                  <col className="w-[64px]" />
+                </colgroup>
+                <thead className="bg-[#f6f7fb] border-b border-[#e6e9f2]">
+                  <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
+                    <th className="px-4 py-3 w-16 min-w-[64px]">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsCustomizeColumnsOpen(true);
+                          }}
+                          className="h-6 w-6 flex items-center justify-center rounded border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
+                          title="Customize Columns"
+                        >
+                          <SlidersHorizontal size={13} className="text-[#1b5e6a]" />
+                        </button>
+                        <div className="h-5 w-px bg-gray-200" />
+                        <button
+                          className="h-4 w-4 flex items-center justify-center hover:bg-gray-200 rounded transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectAll();
+                          }}
+                        >
+                          {filteredCreditNotes.length > 0 && filteredCreditNotes.every((note) => selectedCreditNotes.includes(note.id)) ? (
+                            <CheckSquare size={16} fill="#6b7280" color="#6b7280" />
+                          ) : (
+                            <Square size={16} className="text-gray-400" />
+                          )}
+                        </button>
+                      </div>
+                    </th>
+                    {isColumnVisible("date") && <th className="px-4 py-3 text-left">DATE</th>}
+                    {isColumnVisible("location") && <th className="px-4 py-3 text-left">LOCATION</th>}
+                    {isColumnVisible("creditNoteNumber") && <th className="px-4 py-3 text-left">
+                      <button className="flex items-center gap-2 hover:text-blue-600 transition-colors">
                         CREDIT NOTE#
                         <ArrowUpDown size={14} className="text-gray-400" />
                       </button>
-                  </th>}
-                  {isColumnVisible("referenceNumber") && <th className="px-4 py-3 text-left">REFERENCE NUMBER</th>}
-                  {isColumnVisible("customerName") && <th className="px-4 py-3 text-left">CUSTOMER NAME</th>}
-                  {isColumnVisible("invoiceNumber") && <th className="px-4 py-3 text-left">INVOICE#</th>}
-                  {isColumnVisible("status") && <th className="px-4 py-3 text-left">STATUS</th>}
-                  {isColumnVisible("amount") && <th className="px-4 py-3 text-left">AMOUNT</th>}
-                  {isColumnVisible("balance") && <th className="px-4 py-3 text-left">BALANCE</th>}
-                  {isColumnVisible("salesPerson") && <th className="px-4 py-3 text-left">SALES PERSON</th>}
-                  <th className="px-4 py-3 text-left bg-[#f6f7fb]">
+                    </th>}
+                    {isColumnVisible("referenceNumber") && <th className="px-4 py-3 text-left">REFERENCE NUMBER</th>}
+                    {isColumnVisible("customerName") && <th className="px-4 py-3 text-left">CUSTOMER NAME</th>}
+                    {isColumnVisible("invoiceNumber") && <th className="px-4 py-3 text-left">INVOICE#</th>}
+                    {isColumnVisible("status") && <th className="px-4 py-3 text-left">STATUS</th>}
+                    {isColumnVisible("amount") && <th className="px-4 py-3 text-left">AMOUNT</th>}
+                    {isColumnVisible("balance") && <th className="px-4 py-3 text-left">BALANCE</th>}
+                    {isColumnVisible("salesPerson") && <th className="px-4 py-3 text-left">SALES PERSON</th>}
+                    <th className="px-4 py-3 text-left bg-[#f6f7fb]">
                       <button
                         onClick={() => setShowSearchModal(true)}
                         className="cursor-pointer hover:text-gray-700"
                       >
                         <Search size={16} className="text-gray-500" />
                       </button>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {isRefreshing || !hasLoadedOnce ? (
-                  Array(5).fill(0).map((_, index) => (
-                    <tr key={`skeleton-${index}`} className="animate-pulse border-b border-gray-50">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="h-6 w-6 shrink-0" aria-hidden />
-                          <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
-                          <div className="w-4 h-4 bg-gray-100 rounded"></div>
-                        </div>
-                      </td>
-                      {isColumnVisible("date") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
-                      {isColumnVisible("location") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
-                      {isColumnVisible("creditNoteNumber") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>}
-                      {isColumnVisible("referenceNumber") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
-                      {isColumnVisible("customerName") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>}
-                      {isColumnVisible("invoiceNumber") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
-                      {isColumnVisible("status") && <td className="px-4 py-3"><div className="h-6 bg-gray-100 rounded w-20"></div></td>}
-                      {isColumnVisible("amount") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>}
-                      {isColumnVisible("balance") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>}
-                      {isColumnVisible("salesPerson") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
-                      <td className="px-4 py-3"></td>
-                    </tr>
-                  ))
-                ) : filteredCreditNotes.length === 0 ? (
-                  <tr>
-                    <td colSpan={visibleColumns.length + 2} className="px-4 py-8 text-center text-gray-500 text-sm">
-                      No credit notes found matching the selected filter.
-                    </td>
+                    </th>
                   </tr>
-                ) : (
-                  filteredCreditNotes.map((note) => {
-                    const isSelected = selectedCreditNotes.includes(note.id);
-                    return (
-                      <tr
-                        key={note.id}
-                        onClick={(e) => {
-                          const target = e.target as HTMLElement;
-                          if (!target.closest('button') && !target.closest('svg')) {
-                            const payload = { ...note, customerName: getCreditNoteCustomerName(note) };
-                            navigate(`/sales/credit-notes/${note.id}`, { state: { creditNote: payload } });
-                          }
-                        }}
-                        className="group transition-all hover:bg-slate-50/50 cursor-pointer"
-                        style={isSelected ? { backgroundColor: "#1b5e6a1A" } : {}}
-                      >
+                </thead>
+              </table>
+            </div>
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+            <div className="w-full overflow-x-auto">
+              <table className="w-full min-w-[1180px] text-left border-collapse table-fixed">
+                <colgroup>
+                  <col className="w-16" />
+                  {isColumnVisible("date") && <col className="w-[130px]" />}
+                  {isColumnVisible("location") && <col className="w-[120px]" />}
+                  {isColumnVisible("creditNoteNumber") && <col className="w-[150px]" />}
+                  {isColumnVisible("referenceNumber") && <col className="w-[150px]" />}
+                  {isColumnVisible("customerName") && <col className="w-[180px]" />}
+                  {isColumnVisible("invoiceNumber") && <col className="w-[120px]" />}
+                  {isColumnVisible("status") && <col className="w-[110px]" />}
+                  {isColumnVisible("amount") && <col className="w-[120px]" />}
+                  {isColumnVisible("balance") && <col className="w-[120px]" />}
+                  {isColumnVisible("salesPerson") && <col className="w-[150px]" />}
+                  <col className="w-[64px]" />
+                </colgroup>
+                <tbody className="divide-y divide-gray-100 bg-white">
+                  {isRefreshing || !hasLoadedOnce ? (
+                    Array(5).fill(0).map((_, index) => (
+                      <tr key={`skeleton-${index}`} className="animate-pulse border-b border-gray-50">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <span className="h-6 w-6 shrink-0" aria-hidden />
                             <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
-                            <button
-                              className="h-4 w-4 flex items-center justify-center hover:bg-gray-200 rounded transition-colors"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedCreditNotes(prev =>
-                                  prev.includes(note.id)
-                                    ? prev.filter(id => id !== note.id)
-                                    : [...prev, note.id]
-                                );
-                              }}
-                            >
-                              {selectedCreditNotes.includes(note.id) ? (
-                                <CheckSquare size={16} fill="#6b7280" color="#6b7280" />
-                              ) : (
-                                <Square size={16} className="text-gray-400" />
-                              )}
-                            </button>
+                            <div className="w-4 h-4 bg-gray-100 rounded"></div>
                           </div>
                         </td>
-                        {isColumnVisible("date") && <td className="px-4 py-3 text-[13px] text-slate-600">{formatDate(note.creditNoteDate || note.date)}</td>}
-                        {isColumnVisible("location") && <td className="px-4 py-3 text-[13px] text-slate-600">{note.location || "-"}</td>}
-                        {isColumnVisible("creditNoteNumber") && <td className="px-4 py-3">
-                          <span
-                            className="text-[13px] font-medium text-[#156372] hover:underline cursor-pointer"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const payload = { ...note, customerName: getCreditNoteCustomerName(note) };
-                              navigate(`/sales/credit-notes/${note.id}`, { state: { creditNote: payload } });
-                            }}
-                          >
-                            {note.creditNoteNumber || note.id}
-                          </span>
-                        </td>}
-                        {isColumnVisible("referenceNumber") && <td className="px-4 py-3 text-[13px] text-slate-600">{getCreditNoteReferenceNumber(note)}</td>}
-                        {isColumnVisible("customerName") && <td className="px-4 py-3 text-[13px] text-slate-600">{getCreditNoteCustomerName(note)}</td>}
-                        {isColumnVisible("invoiceNumber") && <td className="px-4 py-3 text-[13px] text-slate-600">{note.invoiceNumber || ""}</td>}
-                        {isColumnVisible("status") && <td className="px-4 py-3">
-                          <span
-                            className={`text-[11px] font-semibold ${(note.status || "open").toLowerCase() === "open"
-                              ? "text-green-700"
-                              : (note.status || "open").toLowerCase() === "closed"
-                                ? "text-gray-700"
-                                : (note.status || "open").toLowerCase() === "draft"
-                                  ? "text-yellow-700"
-                                  : "text-red-700"
-                              }`}
-                          >
-                            {(note.status || "open").toUpperCase()}
-                          </span>
-                        </td>}
-                        {isColumnVisible("amount") && <td className="px-4 py-3 text-[13px] text-slate-600 font-semibold">{formatCurrency(note.total || note.amount || 0, note.currency)}</td>}
-                        {isColumnVisible("balance") && <td className="px-4 py-3 text-[13px] text-slate-600">{formatCurrency(note.balance || note.total || note.amount || 0, note.currency)}</td>}
-                        {isColumnVisible("salesPerson") && <td className="px-4 py-3 text-[13px] text-slate-600">{note.salesPerson || note.salesperson || note.salesPersonName || "-"}</td>}
+                        {isColumnVisible("date") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
+                        {isColumnVisible("location") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
+                        {isColumnVisible("creditNoteNumber") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>}
+                        {isColumnVisible("referenceNumber") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
+                        {isColumnVisible("customerName") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>}
+                        {isColumnVisible("invoiceNumber") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
+                        {isColumnVisible("status") && <td className="px-4 py-3"><div className="h-6 bg-gray-100 rounded w-20"></div></td>}
+                        {isColumnVisible("amount") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>}
+                        {isColumnVisible("balance") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>}
+                        {isColumnVisible("salesPerson") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
                         <td className="px-4 py-3"></td>
                       </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                    ))
+                  ) : filteredCreditNotes.length === 0 ? (
+                    <tr>
+                      <td colSpan={visibleColumns.length + 2} className="px-4 py-8 text-center text-gray-500 text-sm">
+                        No credit notes found matching the selected filter.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredCreditNotes.map((note) => {
+                      const isSelected = selectedCreditNotes.includes(note.id);
+                      return (
+                        <tr
+                          key={note.id}
+                          onClick={(e) => {
+                            const target = e.target as HTMLElement;
+                            if (!target.closest('button') && !target.closest('svg')) {
+                              const payload = { ...note, customerName: getCreditNoteCustomerName(note) };
+                              navigate(`/sales/credit-notes/${note.id}`, { state: { creditNote: payload } });
+                            }
+                          }}
+                          className="group transition-all hover:bg-slate-50/50 cursor-pointer"
+                          style={isSelected ? { backgroundColor: "#1b5e6a1A" } : {}}
+                        >
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="h-6 w-6 shrink-0" aria-hidden />
+                              <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
+                              <button
+                                className="h-4 w-4 flex items-center justify-center hover:bg-gray-200 rounded transition-colors"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedCreditNotes(prev =>
+                                    prev.includes(note.id)
+                                      ? prev.filter(id => id !== note.id)
+                                      : [...prev, note.id]
+                                  );
+                                }}
+                              >
+                                {selectedCreditNotes.includes(note.id) ? (
+                                  <CheckSquare size={16} fill="#6b7280" color="#6b7280" />
+                                ) : (
+                                  <Square size={16} className="text-gray-400" />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                          {isColumnVisible("date") && <td className="px-4 py-3 text-[13px] text-slate-600">{formatDate(note.creditNoteDate || note.date)}</td>}
+                          {isColumnVisible("location") && <td className="px-4 py-3 text-[13px] text-slate-600">{note.location || "-"}</td>}
+                          {isColumnVisible("creditNoteNumber") && <td className="px-4 py-3">
+                            <span
+                              className="text-[13px] font-medium text-[#156372] hover:underline cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const payload = { ...note, customerName: getCreditNoteCustomerName(note) };
+                                navigate(`/sales/credit-notes/${note.id}`, { state: { creditNote: payload } });
+                              }}
+                            >
+                              {note.creditNoteNumber || note.id}
+                            </span>
+                          </td>}
+                          {isColumnVisible("referenceNumber") && <td className="px-4 py-3 text-[13px] text-slate-600">{getCreditNoteReferenceNumber(note)}</td>}
+                          {isColumnVisible("customerName") && <td className="px-4 py-3 text-[13px] text-slate-600">{getCreditNoteCustomerName(note)}</td>}
+                          {isColumnVisible("invoiceNumber") && <td className="px-4 py-3 text-[13px] text-slate-600">{note.invoiceNumber || ""}</td>}
+                          {isColumnVisible("status") && <td className="px-4 py-3">
+                            <span
+                              className={`text-[11px] font-semibold ${(note.status || "open").toLowerCase() === "open"
+                                ? "text-green-700"
+                                : (note.status || "open").toLowerCase() === "closed"
+                                  ? "text-gray-700"
+                                  : (note.status || "open").toLowerCase() === "draft"
+                                    ? "text-yellow-700"
+                                    : "text-red-700"
+                                }`}
+                            >
+                              {(note.status || "open").toUpperCase()}
+                            </span>
+                          </td>}
+                          {isColumnVisible("amount") && <td className="px-4 py-3 text-[13px] text-slate-600 font-semibold">{formatCurrency(note.total || note.amount || 0, note.currency)}</td>}
+                          {isColumnVisible("balance") && <td className="px-4 py-3 text-[13px] text-slate-600">{formatCurrency(note.balance || note.total || note.amount || 0, note.currency)}</td>}
+                          {isColumnVisible("salesPerson") && <td className="px-4 py-3 text-[13px] text-slate-600">{note.salesPerson || note.salesperson || note.salesPersonName || "-"}</td>}
+                          <td className="px-4 py-3"></td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -2043,8 +2039,6 @@ export default function CreditNotes() {
           onClose={() => setIsFieldCustomizationOpen(false)}
         />
       )}
-
-      </div>
 
       {/* Preferences Modal */}
       {isPreferencesModalOpen && (

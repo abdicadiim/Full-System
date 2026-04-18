@@ -133,16 +133,16 @@ export default function BulkUpdateModal({ isOpen, onClose, onUpdate, title, fiel
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[2000] backdrop-blur-[2px]">
-            <div className="bg-white rounded-lg shadow-2xl max-w-[760px] w-full mx-4 overflow-hidden border border-gray-100">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+        <div className="fixed inset-0 z-[2000] flex items-start justify-center bg-black/40 pt-20 backdrop-blur-[2px]">
+            <div className="mx-4 w-full max-w-[680px] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
                     <h2 className="text-lg font-semibold text-gray-800">{title}</h2>
                     <button onClick={onClose} className="rounded-full p-1 hover:bg-gray-200 transition-colors">
                         <X size={20} className="text-gray-500 hover:text-red-500" />
                     </button>
                 </div>
-                <div className="p-6">
-                    <div className="mb-4 text-[24px] text-gray-600">
+                <div className="px-6 py-5">
+                    <div className="mb-4 text-[20px] leading-8 text-gray-600">
                         Choose a field from the dropdown and update with new information.
                     </div>
 

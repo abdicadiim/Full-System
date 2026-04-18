@@ -1651,8 +1651,11 @@ export default function RecurringInvoices() {
               bottom: 0,
               backgroundColor: "rgba(0, 0, 0, 0.5)",
               display: "flex",
-              alignItems: "center",
+              alignItems: "flex-start",
               justifyContent: "center",
+              paddingTop: "56px",
+              paddingBottom: "24px",
+              overflowY: "auto",
               zIndex: 10000
             }}
             onClick={handleCloseBulkUpdateModal}

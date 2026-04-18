@@ -233,6 +233,9 @@ export default function LoginPage() {
         const failureMessage = String(failure?.message || "");
         const badCredentials =
           failure?.code === 401 ||
+          /not authorized/i.test(failureMessage) ||
+          /unauthorized/i.test(failureMessage) ||
+          /forbidden/i.test(failureMessage) ||
           /incorrect password/i.test(failureMessage) ||
           /invalid username or password/i.test(failureMessage) ||
           /invalid credentials/i.test(failureMessage);

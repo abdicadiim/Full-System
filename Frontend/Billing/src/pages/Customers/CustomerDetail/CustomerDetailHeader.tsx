@@ -120,17 +120,17 @@ export default function CustomerDetailHeader(args: any) {
 
             <div className="relative inline-flex" ref={newTransactionDropdownRef}>
               <div className="flex items-center">
-                <button
-                  className="flex h-[38px] min-w-[140px] cursor-pointer items-center justify-center gap-2 rounded-l-lg border-b-[4px] border-[#0D4A52] px-4 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
-                  style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
+              <button
+                  className="flex h-[38px] min-w-[140px] cursor-pointer items-center justify-center gap-2 rounded-l-lg border-b-[4px] border-[#0b5449] px-4 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
+                  style={{ background: "linear-gradient(180deg, #0f6e60 0%, #0b5449 100%)" }}
                   onClick={() => setIsNewTransactionDropdownOpen(!isNewTransactionDropdownOpen)}
                 >
                   <Plus size={16} />
                   New Transaction
                 </button>
-                <button
+              <button
                   className="flex h-[38px] w-10 cursor-pointer items-center justify-center rounded-r-lg border-b-[4px] border-l border-[#0B3A41] border-white/20 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
-                  style={{ background: "#0D4A52" }}
+                  style={{ background: "#0b5449" }}
                   onClick={() => setIsNewTransactionDropdownOpen(!isNewTransactionDropdownOpen)}
                 >
                   <ChevronDown size={14} />

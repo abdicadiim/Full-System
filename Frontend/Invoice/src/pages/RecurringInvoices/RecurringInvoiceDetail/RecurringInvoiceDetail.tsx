@@ -1333,7 +1333,7 @@ export default function RecurringInvoiceDetail() {
           )}
 
           {activeTab === "Next Invoice" && (
-            <div className="p-6 bg-gray-50">
+            <div className="p-6 bg-white">
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 max-w-5xl mx-auto" style={{ position: "relative", overflow: "hidden" }}>
                 {/* Active Banner */}
                 <div
@@ -1477,7 +1477,7 @@ export default function RecurringInvoiceDetail() {
                     <div className="relative z-10 w-4 h-4 bg-[#156372] rounded-full border-2 border-white shadow-sm"></div>
 
                     {/* Activity Card */}
-                    <div className="flex-1 bg-gray-50 rounded-lg border border-gray-200 p-4">
+                    <div className="flex-1 bg-white rounded-lg border border-gray-200 p-4">
                       <div className="flex items-start justify-between mb-2">
                         <div className="text-xs text-gray-600">
                           {formatDate(recurringInvoice.createdAt || recurringInvoice.startOn)} • 01:10 PM
@@ -1507,7 +1507,7 @@ export default function RecurringInvoiceDetail() {
                             <div className="relative z-10 w-4 h-4 bg-[#156372] rounded-full border-2 border-white shadow-sm"></div>
 
                             {/* Activity Card */}
-                            <div className="flex-1 bg-gray-50 rounded-lg border border-gray-200 p-4">
+                            <div className="flex-1 bg-white rounded-lg border border-gray-200 p-4">
                               <div className="flex items-start justify-between mb-2">
                                 <div className="text-xs text-gray-600">
                                   {formatDate(invoice.date || invoice.createdAt)} • {formattedTime}

@@ -1,5 +1,6 @@
 import React from "react";
 import { CreditNote } from "../../salesModel";
+import { getCachedCreditNoteSettings } from "../../../services/api";
 
 interface CreditNotePreviewProps {
   creditNote: CreditNote;
@@ -15,6 +16,11 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({
   onCustomerClick
 }) => {
   void onCustomerClick;
+
+  const toNumber = (value: any) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : 0;
+  };
 
   const formatCurrency = (amount: number, currency?: string) => {
     const curr = (currency || baseCurrency || "USD");
@@ -35,20 +41,49 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({
     return `${day} ${month} ${year}`;
   };
 
-  const items = creditNote.items || [];
-  const subtotal =
-    (creditNote.subtotal ?? creditNote.subTotal ?? items.reduce((s: any, it: any) => s + (parseFloat(it.total || it.amount || 0) || (parseFloat(it.quantity || 0) * parseFloat(it.unitPrice || it.rate || 0))), 0)) || 0;
-  const shipping = Number((creditNote as any).shippingCharges ?? (creditNote as any).shipping ?? 0) || 0;
-  const shippingTaxRate = Number((creditNote as any).shippingTaxRate ?? 0) || 0;
-  const shippingTaxAmount = Number(
+  const items = Array.isArray(creditNote.items)
+    ? creditNote.items
+    : Array.isArray((creditNote as any).lineItems)
+      ? (creditNote as any).lineItems
+      : Array.isArray((creditNote as any).invoiceItems)
+        ? (creditNote as any).invoiceItems
+        : [];
+  const derivedSubtotal = items.reduce((sum: number, item: any) => {
+    const explicitAmount = toNumber(item?.total ?? item?.amount);
+    if (explicitAmount) return sum + explicitAmount;
+    const qty = toNumber(item?.quantity);
+    const rate = toNumber(item?.unitPrice ?? item?.rate);
+    return sum + qty * rate;
+  }, 0);
+  const subtotal = toNumber(creditNote.subtotal ?? creditNote.subTotal ?? derivedSubtotal);
+  const shipping = toNumber((creditNote as any).shippingCharges ?? (creditNote as any).shipping);
+  const shippingTaxRate = toNumber((creditNote as any).shippingTaxRate);
+  const shippingTaxAmount = toNumber(
     (creditNote as any).shippingTaxAmount ??
     (creditNote as any).shippingTax ??
     (shippingTaxRate > 0 ? (shipping * shippingTaxRate) / 100 : 0)
-  ) || 0;
+  );
   const shippingTaxName = String((creditNote as any).shippingTaxName || (creditNote as any).shippingChargeTax || "");
-  const adjustment = Number((creditNote as any).adjustment ?? 0) || 0;
-  const total = (creditNote.total ?? creditNote.amount) || 0;
-  const balance = creditNote.balance ?? total;
+  const adjustment = toNumber((creditNote as any).adjustment);
+  const discount = toNumber((creditNote as any).discount);
+  const vat = toNumber((creditNote as any).tax ?? (creditNote as any).vat ?? 0);
+  const total = toNumber(
+    creditNote.total ??
+    creditNote.amount ??
+    (subtotal - discount + shipping + shippingTaxAmount + vat + adjustment)
+  );
+  const balance = toNumber(creditNote.balance ?? total);
+  const creditNoteSettings = getCachedCreditNoteSettings();
+  const qrCodeEnabled = Boolean(creditNoteSettings?.qrCodeEnabled);
+  const qrPayload = String(
+    (creditNoteSettings as any)?.qrCodeValue ||
+      (typeof window !== "undefined"
+        ? `${window.location.origin}/credit-notes/${creditNote.id || creditNote.creditNoteNumber || ""}`
+        : `credit-note:${creditNote.creditNoteNumber || creditNote.id || ""}`)
+  ).trim();
+  const qrCodeUrl = qrCodeEnabled && qrPayload
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(qrPayload)}`
+    : "";
 
   return (
     <div
@@ -172,14 +207,17 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({
                   )}
                 </td>
                 <td className="py-4 px-4 text-right text-sm text-gray-900">
-                  {parseFloat(item.quantity || 0).toFixed(2)}
+                  {toNumber(item.quantity).toFixed(2)}
                   {item.unit && <span className="text-gray-400 text-xs ml-1">{item.unit}</span>}
                 </td>
                 <td className="py-4 px-4 text-right text-sm text-gray-900">
-                  {formatCurrency(item.unitPrice || item.rate || 0, creditNote.currency).replace(/[A-Z]{3}\s?/, "")}
+                  {formatCurrency(toNumber(item.unitPrice ?? item.rate), creditNote.currency).replace(/[A-Z]{3}\s?/, "")}
                 </td>
                 <td className="py-4 px-4 text-right text-sm font-medium text-gray-900">
-                  {formatCurrency(item.total || item.amount || (item.quantity * (item.unitPrice || item.rate)) || 0, creditNote.currency).replace(/[A-Z]{3}\s?/, "")}
+                  {formatCurrency(
+                    toNumber(item.total ?? item.amount ?? (toNumber(item.quantity) * toNumber(item.unitPrice ?? item.rate))),
+                    creditNote.currency
+                  ).replace(/[A-Z]{3}\s?/, "")}
                 </td>
               </tr>
             ))}
@@ -204,11 +242,11 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({
               </span>
             </div>
 
-            {(creditNote.discount || 0) > 0 && (
+            {discount > 0 && (
               <div className="flex justify-between py-2 text-sm border-b border-gray-100">
                 <span className="text-gray-600 font-medium">Discount</span>
                 <span className="font-medium text-gray-900">
-                  -{formatCurrency(creditNote.discount || 0, creditNote.currency).replace(/[A-Z]{3}\s?/, "")}
+                  -{formatCurrency(discount, creditNote.currency).replace(/[A-Z]{3}\s?/, "")}
                 </span>
               </div>
             )}
@@ -233,19 +271,19 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({
               </div>
             )}
 
-            {(creditNote.tax || creditNote.vat || (creditNote.taxes && creditNote.taxes.length > 0)) && (
+            {(vat || (creditNote.taxes && creditNote.taxes.length > 0)) && (
               <div className="flex justify-between py-2 text-sm border-b border-gray-100">
                 <span className="text-gray-600 font-medium">VAT</span>
                 <span className="font-medium text-gray-900">
                   {formatCurrency(
-                    creditNote.tax ?? creditNote.vat ?? (Array.isArray(creditNote.taxes) ? creditNote.taxes.reduce((s: any, t: any) => s + (t.amount || 0), 0) : 0),
+                    vat || (Array.isArray(creditNote.taxes) ? creditNote.taxes.reduce((s: any, t: any) => s + toNumber(t.amount), 0) : 0),
                     creditNote.currency
                   ).replace(/[A-Z]{3}\s?/, "")}
                 </span>
               </div>
             )}
 
-            {(adjustment || 0) !== 0 && (
+            {adjustment !== 0 && (
               <div className="flex justify-between py-2 text-sm border-b border-gray-100">
                 <span className="text-gray-600 font-medium">Adjustment</span>
                 <span className="font-medium text-gray-900">
@@ -285,6 +323,23 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({
           PDF Template : <span className="text-blue-500 cursor-pointer hover:underline">'Standard Template'</span> <span className="text-blue-500 cursor-pointer hover:underline mx-1">Change</span>
         </div>
       </div>
+
+      {qrCodeUrl && (
+        <div className="px-8 pb-8 flex justify-end">
+          <div className="flex items-center gap-3 rounded-lg border border-gray-200 px-4 py-3">
+            <div className="text-right">
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Credit Note QR</div>
+              <div className="text-[11px] text-gray-500">Scan to open the credit note</div>
+            </div>
+            <img
+              src={qrCodeUrl}
+              alt="Credit note QR code"
+              className="h-24 w-24 rounded bg-white"
+              crossOrigin="anonymous"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

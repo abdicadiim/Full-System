@@ -42,7 +42,7 @@ import {
 } from "lucide-react";
 import { saveInvoice, getInvoiceById, updateInvoice, updateQuote, getTaxes, saveTax, deleteTax, Customer, Tax, Salesperson, Invoice, ContactPerson } from "../../salesModel";
 import { getAllDocuments } from "../../../utils/documentStorage";
-import { customersAPI, salespersonsAPI, projectsAPI, invoicesAPI, itemsAPI, bankAccountsAPI, currenciesAPI, transactionNumberSeriesAPI, chartOfAccountsAPI, accountantAPI, reportingTagsAPI, priceListsAPI } from "../../../services/api";
+import { customersAPI, salespersonsAPI, projectsAPI, invoicesAPI, expensesAPI, itemsAPI, bankAccountsAPI, currenciesAPI, transactionNumberSeriesAPI, chartOfAccountsAPI, accountantAPI, reportingTagsAPI, priceListsAPI } from "../../../services/api";
 import { useCurrency } from "../../../hooks/useCurrency";
 import { usePaymentTermsDropdown, defaultPaymentTerms, PaymentTerm } from "../../../hooks/usePaymentTermsDropdown";
 import { API_BASE_URL, getToken } from "../../../services/auth";
@@ -161,6 +161,7 @@ const isEditMode = Boolean(id);
 const quoteDataFromState: any = (location as any)?.state?.quoteData || null;
 const hasAppliedQuotePrefillRef = useRef(false);
 const convertedFromQuoteIdRef = useRef<string | null>(null);
+const convertedFromExpenseIdRef = useRef<string | null>(null);
 const settingsDropdownRef = useRef<HTMLDivElement>(null);
 const [isSettingsDropdownOpen, setIsSettingsDropdownOpen] = useState(false);
 const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
@@ -1549,6 +1550,122 @@ useEffect(() => {
   prefillAppliedRef.current = true;
 }, [location.state, customers, isEditMode]);
 
+const mapExpenseToInvoiceItems = (sourceExpense: any) => {
+  const rows =
+    Array.isArray(sourceExpense?.line_items) && sourceExpense.line_items.length > 0
+      ? sourceExpense.line_items
+      : Array.isArray(sourceExpense?.lineItems)
+        ? sourceExpense.lineItems
+        : [];
+
+  const normalizeLine = (line: any, index: number) => {
+    const quantity = Number(line?.quantity ?? line?.qty ?? 1) || 1;
+    const amount = Number(line?.amount ?? line?.total ?? line?.rate ?? 0) || 0;
+    const rate = quantity ? amount / quantity : amount;
+
+    return {
+      id: line?.id || line?._id || `expense-item-${index}-${Date.now()}`,
+      itemDetails: String(line?.description || line?.itemDetails || sourceExpense?.expenseAccount || "Expense").trim(),
+      description: String(line?.description || line?.notes || ""),
+      quantity,
+      rate,
+      amount,
+      tax: String(line?.tax || line?.taxName || ""),
+      account: String(line?.account_name || line?.account || sourceExpense?.expenseAccount || ""),
+      reportingTags: Array.isArray(line?.reportingTags) ? line.reportingTags : [],
+    };
+  };
+
+  if (rows.length === 0) {
+    const amount = Number(sourceExpense?.amount || sourceExpense?.total || 0) || 0;
+    return [
+      {
+        id: `expense-item-${sourceExpense?.expense_id || sourceExpense?.id || Date.now()}`,
+        itemDetails: String(sourceExpense?.expenseAccount || sourceExpense?.notes || "Expense"),
+        description: String(sourceExpense?.notes || sourceExpense?.description || ""),
+        quantity: 1,
+        rate: amount,
+        amount,
+        tax: String(sourceExpense?.tax || ""),
+        account: String(sourceExpense?.expenseAccount || ""),
+        reportingTags: Array.isArray(sourceExpense?.reportingTags) ? sourceExpense.reportingTags : [],
+      },
+    ];
+  }
+
+  return rows.map(normalizeLine);
+};
+
+useEffect(() => {
+  if (prefillAppliedRef.current) return;
+  if (isEditMode) return;
+
+  const state = location.state as any;
+  if (!state || state.source !== "expense") return;
+
+  const expense = state.fromExpense || state.expense;
+  if (!expense) return;
+  convertedFromExpenseIdRef.current = String(state.fromExpenseId || expense.expense_id || expense.id || "").trim() || null;
+
+  const customerId = String(state.customerId || expense.customer_id || expense.customerId || expense.customer?._id || expense.customer?.id || "").trim();
+  const customerName = String(
+    state.customerName ||
+      expense.customerName ||
+      expense.customer?.displayName ||
+      expense.customer?.companyName ||
+      expense.customer?.name ||
+      ""
+  ).trim();
+
+  const matchedCustomer =
+    (customerId
+      ? customers.find((customer: any) => String(customer?.id || customer?._id || "") === customerId)
+      : null) ||
+    customers.find(
+      (customer: any) =>
+        String(customer?.name || customer?.displayName || customer?.companyName || "").trim().toLowerCase() ===
+        customerName.toLowerCase()
+    );
+
+  if (matchedCustomer) {
+    setSelectedCustomer(matchedCustomer);
+  } else if (customerName) {
+    setSelectedCustomer({
+      id: customerId || undefined,
+      _id: customerId || undefined,
+      name: customerName,
+      displayName: customerName,
+      companyName: customerName,
+    });
+  }
+
+  const mappedItems = Array.isArray(state.expenseItems) && state.expenseItems.length > 0
+    ? state.expenseItems
+    : mapExpenseToInvoiceItems(expense);
+
+  setFormData((prev) => {
+    const nextItems = mappedItems.length > 0 ? mappedItems : prev.items;
+    const nextState = {
+      ...prev,
+      customerName: customerName || prev.customerName,
+      selectedLocation: expense.location || prev.selectedLocation,
+      invoiceDate: formatDate(expense.date || expense.expenseDate || expense.raw_date || expense.createdAt || new Date()),
+      currency: resolveInvoiceCurrency(expense.currency || prev.currency || baseCurrencyCode || "USD"),
+      items: nextItems,
+      customerNotes: String(expense.notes || prev.customerNotes || ""),
+    } as InvoiceFormState;
+    const totals = calculateInvoiceTotalsFromData(nextState);
+    return {
+      ...nextState,
+      subTotal: totals.subTotal,
+      roundOff: totals.roundOff,
+      total: totals.total,
+    };
+  });
+
+  prefillAppliedRef.current = true;
+}, [location.state, customers, isEditMode, baseCurrencyCode]);
+
 useEffect(() => {
   if (isEditMode) return;
   if (!quoteDataFromState) return;
@@ -2320,6 +2437,13 @@ const createInvoiceWithNumberRetry = async (invoiceData: any) => {
       const freshNumber = await fetchLatestInvoiceNumber();
       if (freshNumber) {
         const retryPayload = { ...invoiceData, invoiceNumber: freshNumber };
+        return await saveInvoice(retryPayload);
+      }
+    }
+    throw error;
+  }
+};
+
 const updateQuoteAfterConversion = async (quoteStatus: string, savedInvoice: any, invoiceData: any) => {
   const sourceQuoteId = convertedFromQuoteIdRef.current;
   if (!sourceQuoteId) return;
@@ -2333,10 +2457,18 @@ const updateQuoteAfterConversion = async (quoteStatus: string, savedInvoice: any
     console.warn("Failed to update quote after conversion:", error);
   }
 };
-        return await saveInvoice(retryPayload);
-      }
-    }
-    throw error;
+
+const updateExpenseAfterConversion = async (expenseStatus: string, savedInvoice: any, invoiceData: any) => {
+  const sourceExpenseId = convertedFromExpenseIdRef.current;
+  if (!sourceExpenseId) return;
+  const payload: any = { status: expenseStatus };
+  const invoiceId = savedInvoice?.id || savedInvoice?._id;
+  if (invoiceId) payload.convertedToInvoiceId = invoiceId;
+  if (invoiceData?.invoiceNumber) payload.convertedToInvoiceNumber = invoiceData.invoiceNumber;
+  try {
+    await expensesAPI.update(String(sourceExpenseId), payload);
+  } catch (error) {
+    console.warn("Failed to update expense after conversion:", error);
   }
 };
 
@@ -2355,13 +2487,16 @@ const handleSaveDraft = async () => {
     }
 
     // Save or update invoice in localStorage
+    let savedInvoice: any;
     if (isEditMode && id) {
-      await updateInvoice(id, invoiceData);
+      savedInvoice = await updateInvoice(id, invoiceData);
       toast.success("Invoice draft updated successfully.");
     } else {
-      await createInvoiceWithNumberRetry(invoiceData);
+      savedInvoice = await createInvoiceWithNumberRetry(invoiceData);
       toast.success("Invoice draft created successfully.");
     }
+
+    await updateExpenseAfterConversion("invoiced", savedInvoice, invoiceData);
 
     // Navigate back to invoices page
     navigate("/sales/invoices");
@@ -2436,6 +2571,8 @@ const handleSaveAndSend = async (overridingStatus?: string) => {
       savedInvoice = await createInvoiceWithNumberRetry(invoiceData);
       toast.success(requestedStatus === "sent" ? "Invoice created and ready to send." : "Invoice created successfully.");
     }
+
+    await updateExpenseAfterConversion("invoiced", savedInvoice, invoiceData);
 
     // If user requested send, open email page and auto-send.
     if (requestedStatus === "sent") {

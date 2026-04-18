@@ -1413,7 +1413,7 @@ export const saveSalesReceipt = async (receiptData: Partial<SalesReceipt>): Prom
     if (response && response.success && response.data) {
       return response.data;
     }
-    throw new Error('Failed to save sales receipt');
+    throw new Error((response as any)?.message || (response as any)?.error || "Failed to save sales receipt");
   } catch (error) {
     console.error("Error saving sales receipt to API:", error);
     throw error;
@@ -1469,7 +1469,7 @@ export const updateSalesReceipt = async (receiptId: string, receiptData: Partial
     if (response && response.success && response.data) {
       return response.data;
     }
-    throw new Error('Failed to update sales receipt');
+    throw new Error((response as any)?.message || (response as any)?.error || "Failed to update sales receipt");
   } catch (error) {
     console.error("Error updating sales receipt via API:", error);
     throw error;

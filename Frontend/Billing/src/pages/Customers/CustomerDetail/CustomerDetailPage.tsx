@@ -58,7 +58,6 @@ import type {
 
 
 import { useCustomerDetailPageViewModel } from "./useCustomerDetailPageViewModel";
-import LoadingSpinner from "../../../components/LoadingSpinner";
 
 const CUSTOMER_EDIT_PRELOAD_PREFIX = "billing_customer_edit_preload:";
 const CUSTOMER_DETAIL_SIDEBAR_CACHE_KEY = "billing_customer_detail_sidebar_seed";
@@ -1516,11 +1515,7 @@ export default function CustomerDetail() {
         reloadSidebarCustomerList,
     });
     if (!customer && loading) {
-        return (
-            <div className="w-full h-screen flex items-center justify-center bg-gray-50">
-                <LoadingSpinner label="Loading customer..." />
-            </div>
-        );
+        return null;
     }
 
     if (!customer) {

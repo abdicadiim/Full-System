@@ -3802,15 +3802,6 @@ export default function NewCustomer() {
                 </button>
                 <button
                   type="button"
-                  onClick={handleSaveAndSubscribe}
-                  disabled={isSaving || (isEditMode && isLoading && !existingCustomerData)}
-                  className="px-5 py-2 bg-white text-gray-700 border border-gray-300 rounded text-[13px] font-semibold hover:bg-gray-50 hover:border-gray-400 transition-all disabled:opacity-70 flex items-center gap-2 shadow-sm"
-                >
-                  {isSaving && activeSaveAction === "saveAndSubscribe" && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Save and Subscribe
-                </button>
-                <button
-                  type="button"
                   onClick={handleCancel}
                   disabled={isSaving}
                   className="px-5 py-2 bg-white text-gray-600 border border-gray-300 rounded text-[13px] font-semibold hover:bg-gray-50 hover:text-gray-800 transition-all disabled:opacity-70 shadow-sm"

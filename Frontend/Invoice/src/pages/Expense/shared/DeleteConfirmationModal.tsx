@@ -13,27 +13,34 @@ export default function DeleteConfirmationModal({ isOpen, onClose, onConfirm, en
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[2000] backdrop-blur-[2px]">
-            <div className="bg-white rounded-lg shadow-2xl max-w-md w-full mx-4 overflow-hidden border border-gray-100">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50">
-                    <div className="flex items-center gap-2 text-red-600">
-                        <AlertTriangle size={20} />
-                        <h2 className="text-lg font-semibold">Delete {entityName}</h2>
+        <div className="fixed inset-0 z-[2000] flex items-start justify-center bg-black/40 pt-24 backdrop-blur-[2px]">
+            <div className="mx-4 w-full max-w-[520px] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+                    <div className="flex items-center gap-3 text-red-600">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50">
+                            <AlertTriangle size={18} />
+                        </span>
+                        <div>
+                            <h2 className="text-[15px] font-semibold text-slate-800">Delete {entityName}?</h2>
+                            <p className="mt-0.5 text-xs text-slate-500">
+                                This action cannot be undone.
+                            </p>
+                        </div>
                     </div>
-                    <button onClick={onClose} className="rounded-full p-1 hover:bg-gray-200 transition-colors">
-                        <X size={20} className="text-gray-500 hover:text-red-500" />
+                    <button onClick={onClose} className="rounded-full p-1.5 hover:bg-gray-100 transition-colors">
+                        <X size={18} className="text-gray-500 hover:text-red-500" />
                     </button>
                 </div>
-                <div className="p-6">
-                    <p className="text-sm text-gray-700">
+                <div className="px-6 py-5">
+                    <p className="text-sm leading-6 text-slate-600">
                         Are you sure you want to delete {count && count > 1 ? `these ${count} ${entityName}` : `this ${entityName}`}? This action cannot be undone.
                     </p>
                 </div>
-                <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-100 flex justify-end gap-3">
-                    <button onClick={onClose} className="px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
+                <div className="flex justify-end gap-3 border-t border-gray-100 bg-slate-50 px-6 py-4">
+                    <button onClick={onClose} className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50">
                         Cancel
                     </button>
-                    <button onClick={() => { onConfirm(); onClose(); }} className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-semibold hover:bg-red-700 transition-colors">
+                    <button onClick={() => { onConfirm(); onClose(); }} className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700">
                         Delete
                     </button>
                 </div>

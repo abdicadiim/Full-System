@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lock, ChevronDown, Plus, GripVertical, X, Edit2 } from "lucide-react";
+import { toast } from "react-toastify";
+import { settingsAPI } from "../../services/api";
 
 export default function CreditNotesPage() {
   const navigate = useNavigate();
@@ -11,6 +13,7 @@ export default function CreditNotesPage() {
   const [qrCodeEnabled, setQrCodeEnabled] = useState(false);
   const [termsConditions, setTermsConditions] = useState("");
   const [customerNotes, setCustomerNotes] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   
   // Approvals tab states
   const [approvalType, setApprovalType] = useState("no-approval");
@@ -37,8 +40,48 @@ export default function CreditNotesPage() {
   // Related Lists tab states
   const [relatedLists, setRelatedLists] = useState([]);
 
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const response = await settingsAPI.getCreditNoteSettings();
+        if (!mounted || !response?.success) return;
+        const data = response.data || {};
+        setAllowOverrideCostPrices(Boolean(data.allowOverrideCostPrices));
+        setQrCodeEnabled(Boolean(data.qrCodeEnabled));
+        setTermsConditions(String(data.termsConditions || ""));
+        setCustomerNotes(String(data.customerNotes || ""));
+      } catch (error) {
+        console.error("Failed to load credit note settings:", error);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const addApprovalLevel = () => {
     setApprovalLevels([...approvalLevels, { level: approvalLevels.length + 1, approver: "" }]);
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await settingsAPI.updateCreditNoteSettings({
+        allowOverrideCostPrices,
+        qrCodeEnabled,
+        termsConditions,
+        customerNotes
+      });
+      toast.success("Credit note settings saved.");
+    } catch (error) {
+      console.error("Failed to save credit note settings:", error);
+      toast.error("Failed to save credit note settings.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -174,8 +217,12 @@ export default function CreditNotesPage() {
 
           {/* Save Button */}
           <div className="flex items-center justify-start pt-6 border-t border-gray-200">
-            <button className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">
-              Save
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isSaving ? "Saving..." : "Save"}
             </button>
           </div>
         </div>

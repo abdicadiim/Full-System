@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { getCreditNoteById, getCreditNotes, deleteCreditNote, saveCreditNote, CreditNote, AttachedFile, updateCreditNote } from "../../salesModel";
 import { currenciesAPI, bankAccountsAPI, chartOfAccountsAPI, refundsAPI, creditNotesAPI, invoicesAPI, settingsAPI, customersAPI } from "../../../services/api";
+import CreditNoteDeleteModal from "../CreditNoteDeleteModal";
 import ApplyToInvoices from "./ApplyToInvoices";
 import CreditNoteCommentsPanel from "./CreditNoteCommentsPanel";
 import CreditNotePreview from "./CreditNotePreview";
@@ -55,6 +56,9 @@ export default function CreditNoteDetail() {
   const [isAllCreditNotesDropdownOpen, setIsAllCreditNotesDropdownOpen] = useState(false);
   const [isSendEmailModalOpen, setIsSendEmailModalOpen] = useState(false);
   const [isScheduleEmailModalOpen, setIsScheduleEmailModalOpen] = useState(false);
+  const [isDraftApplyConfirmOpen, setIsDraftApplyConfirmOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isDeletingCreditNote, setIsDeletingCreditNote] = useState(false);
   const [emailData, setEmailData] = useState({
     to: "",
     cc: "",
@@ -633,7 +637,38 @@ Best regards`,
   const [isApplyToInvoicesOpen, setIsApplyToInvoicesOpen] = useState(false);
 
   const handleApplyToInvoices = () => {
+    if (creditNoteStatus === "draft") {
+      setIsDraftApplyConfirmOpen(true);
+      return;
+    }
     setIsApplyToInvoicesOpen(true);
+  };
+
+  const handleConfirmDraftApply = async () => {
+    if (!creditNote?.id) {
+      setIsDraftApplyConfirmOpen(false);
+      setIsApplyToInvoicesOpen(true);
+      return;
+    }
+
+    try {
+      const updatedNote = await creditNotesAPI.update(creditNote.id, {
+        status: "open"
+      });
+      if (updatedNote) {
+        setCreditNote((prev) =>
+          mergeCreditNoteLike(prev || creditNote, { ...updatedNote, status: "open" }) as CreditNote
+        );
+      } else {
+        setCreditNote((prev) => prev ? ({ ...prev, status: "open" } as CreditNote) : prev);
+      }
+      setIsDraftApplyConfirmOpen(false);
+      setIsApplyToInvoicesOpen(true);
+      toast.success("Credit note status changed to Open.");
+    } catch (error: any) {
+      console.error("Failed to update draft credit note to open:", error);
+      toast(error?.message || "Failed to update credit note status.");
+    }
   };
 
   function toNumber(value: any) {
@@ -984,12 +1019,14 @@ Best regards`,
       });
     });
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     setIsMoreMenuOpen(false);
-    const shouldDelete = await confirmToast(
-      `Are you sure you want to delete credit note ${creditNote?.creditNoteNumber || creditNote?.id}? This action cannot be undone.`
-    );
-    if (!shouldDelete) return;
+    setIsDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (isDeletingCreditNote) return;
+    setIsDeletingCreditNote(true);
     try {
       if (!id) {
         toast('Missing credit note id.');
@@ -1007,45 +1044,153 @@ Best regards`,
     } catch (error) {
       console.error("Error deleting credit note:", error);
       toast.error("Failed to delete credit note. Please try again.");
+    } finally {
+      setIsDeletingCreditNote(false);
+      setIsDeleteConfirmOpen(false);
     }
   };
 
   const handleClone = async () => {
     setIsMoreMenuOpen(false);
     if (!creditNote) return;
+
+    const extractCreditNoteNumberParts = (value: any) => {
+      const raw = String(value || "").trim();
+      if (!raw) return null;
+      const match = raw.match(/^(.*?)(\d+)([^\d]*)$/);
+      if (!match) return null;
+      return {
+        prefix: match[1] || "",
+        digits: match[2] || "",
+        suffix: match[3] || "",
+        numeric: parseInt(match[2], 10) || 0
+      };
+    };
+
+    const buildNextCreditNoteNumber = (numbers: any[], preferredPrefix = "CN-") => {
+      const parsed = (Array.isArray(numbers) ? numbers : [])
+        .map(extractCreditNoteNumberParts)
+        .filter(Boolean) as Array<{ prefix: string; digits: string; suffix: string; numeric: number }>;
+
+      const prefix =
+        parsed.find((entry) => entry.prefix)?.prefix ||
+        preferredPrefix ||
+        "CN-";
+      const samePrefix = parsed.filter((entry) => entry.prefix === prefix);
+      const widestDigits = samePrefix.reduce((max, entry) => Math.max(max, entry.digits.length), 6);
+      const highest = samePrefix.reduce((max, entry) => Math.max(max, entry.numeric), 0);
+      return `${prefix}${String(highest + 1).padStart(widestDigits, "0")}`;
+    };
+
     try {
-      const nextNumberResponse = await creditNotesAPI.getNextNumber();
+      const [nextNumberResponse, existingNotes] = await Promise.all([
+        creditNotesAPI.getNextNumber(),
+        getCreditNotes().catch(() => [])
+      ]);
+
       const nextCreditNoteNumber =
         nextNumberResponse?.data?.nextNumber ||
         nextNumberResponse?.data?.creditNoteNumber ||
         nextNumberResponse?.nextNumber ||
         "";
 
+      const preferredPrefix =
+        extractCreditNoteNumberParts((creditNote as any)?.creditNoteNumber)?.prefix ||
+        extractCreditNoteNumberParts(nextCreditNoteNumber)?.prefix ||
+        "CN-";
+      const cloneNumber = buildNextCreditNoteNumber(
+        [
+          ...(Array.isArray(existingNotes) ? existingNotes.map((note: any) => note?.creditNoteNumber) : []),
+          (creditNote as any)?.creditNoteNumber,
+          nextCreditNoteNumber
+        ],
+        preferredPrefix
+      );
+
+      const cloneCustomer = (creditNote as any)?.customer;
+      const cloneCustomerId = String((creditNote as any)?.customerId || cloneCustomer?._id || cloneCustomer?.id || (typeof cloneCustomer === "string" ? cloneCustomer : "") || "").trim();
+      const cloneCustomerName = String(
+        (creditNote as any)?.customerName ||
+        cloneCustomer?.displayName ||
+        cloneCustomer?.companyName ||
+        cloneCustomer?.name ||
+        ""
+      ).trim();
+      const cloneReference = String(
+        (creditNote as any)?.referenceNumber ||
+        (creditNote as any)?.reference ||
+        (creditNote as any)?.referenceNo ||
+        (creditNote as any)?.refNumber ||
+        (creditNote as any)?.ref ||
+        ""
+      ).trim();
+      const cloneItems = Array.isArray((creditNote as any)?.items)
+        ? (creditNote as any).items.map((item: any) => ({ ...item }))
+        : [];
+      const cloneTotal = Number((creditNote as any)?.total ?? (creditNote as any)?.amount ?? creditNote.balance ?? 0) || 0;
+      const cloneCurrency = String((creditNote as any)?.currency || "").trim();
+      const sourceStatus = String((creditNote as any)?.status || "open").trim().toLowerCase() || "open";
+
       const clonedPayload: any = {
-        ...creditNote,
-        id: undefined,
-        _id: undefined,
-        creditNoteNumber: nextCreditNoteNumber || "",
+        creditNoteNumber: cloneNumber,
+        customerId: cloneCustomerId,
+        customerName: cloneCustomerName,
+        customer: cloneCustomerId || cloneCustomerName || undefined,
+        invoiceId: String((creditNote as any)?.invoiceId || (creditNote as any)?.invoice || "").trim(),
+        invoiceNumber: String((creditNote as any)?.invoiceNumber || "").trim(),
+        referenceNumber: cloneReference,
+        reference: cloneReference,
+        subject: String((creditNote as any)?.subject || "").trim(),
+        termsAndConditions: String((creditNote as any)?.termsAndConditions || (creditNote as any)?.terms || "").trim(),
+        terms: String((creditNote as any)?.terms || (creditNote as any)?.termsAndConditions || "").trim(),
+        customerNotes: String((creditNote as any)?.customerNotes || (creditNote as any)?.notes || "").trim(),
+        notes: String((creditNote as any)?.notes || (creditNote as any)?.customerNotes || "").trim(),
         creditNoteDate: new Date(),
         date: new Date(),
-        status: "open",
-        balance: Number((creditNote as any).total ?? creditNote.balance ?? 0) || 0,
+        status: sourceStatus,
+        balance: cloneTotal,
+        total: cloneTotal,
+        currency: cloneCurrency || baseCurrency || "USD",
+        items: cloneItems,
         attachedFiles: [],
         comments: [],
         allocations: [],
         appliedInvoices: [],
       };
 
-      const clonedCreditNote = await saveCreditNote(clonedPayload);
+      let clonedCreditNote;
+      try {
+        clonedCreditNote = await saveCreditNote(clonedPayload);
+      } catch (error: any) {
+        const message = String(error?.message || "").toLowerCase();
+        if (!message.includes("duplicate") && !message.includes("exists")) {
+          throw error;
+        }
+
+        const freshNotes = await getCreditNotes().catch(() => []);
+        const retryNumber = buildNextCreditNoteNumber(
+          [
+            ...(Array.isArray(freshNotes) ? freshNotes.map((note: any) => note?.creditNoteNumber) : []),
+            cloneNumber
+          ],
+          preferredPrefix
+        );
+        clonedPayload.creditNoteNumber = retryNumber;
+        clonedPayload.referenceNumber = cloneReference;
+        clonedPayload.reference = cloneReference;
+        clonedCreditNote = await saveCreditNote(clonedPayload);
+      }
+
       await queryClient.invalidateQueries({ queryKey: ["credit-notes", "list"] });
       toast.success("Credit note cloned successfully.");
+      const openedClone = { ...clonedCreditNote, status: sourceStatus };
       navigate(`/sales/credit-notes/${clonedCreditNote.id || clonedCreditNote._id}`, {
         replace: true,
-        state: { creditNote: clonedCreditNote }
+        state: { creditNote: openedClone }
       });
     } catch (error) {
       console.error("Error cloning credit note:", error);
-      toast.error("Failed to clone credit note. Please try again.");
+      toast.error((error as any)?.message || "Failed to clone credit note. Please try again.");
     }
   };
 
@@ -1278,20 +1423,6 @@ Best regards`,
                   ))}
                 </div>
 
-                {/* New Custom View */}
-                <div
-                  onClick={() => {
-                    setIsAllCreditNotesDropdownOpen(false);
-                    navigate("/sales/credit-notes/custom-view/new");
-                  }}
-                  className="flex items-center justify-center gap-2 px-4 py-3 border-t border-gray-200 text-sm font-semibold cursor-pointer transition-colors"
-                  style={{ backgroundColor: "rgba(21, 99, 114, 0.1)", color: "#156372" }}
-                  onMouseEnter={(e: React.MouseEvent) => ((e.target as HTMLElement).style.backgroundColor = "rgba(21, 99, 114, 0.15)")}
-                  onMouseLeave={(e: React.MouseEvent) => ((e.target as HTMLElement).style.backgroundColor = "rgba(21, 99, 114, 0.1)")}
-                >
-                  <Plus size={16} />
-                  New Custom View
-                </div>
               </div>
             )}
           </div>
@@ -1521,7 +1652,7 @@ Best regards`,
         <div className="bg-white border-b border-gray-200 px-6 py-2 flex-shrink-0">
           <div className="flex items-center gap-0">
             <button
-              onClick={() => navigate(`/sales/credit-notes/${id}/edit`)}
+              onClick={() => navigate(`/sales/credit-notes/${id}/edit`, { state: { creditNote } })}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors border-r border-gray-200 pr-4"
             >
               <Edit size={16} />
@@ -1590,41 +1721,35 @@ Best regards`,
 
         {/* Credit Note Document */}
         <div className="flex-1 overflow-y-auto p-3 bg-gray-50">
-          <div className="w-full max-w-[1280px] mx-auto mb-3 border border-gray-200 rounded-md bg-white overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setIsCreditAppliedInvoicesOpen((prev) => !prev)}
-              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50"
-            >
-              <div className="text-sm font-semibold text-gray-800">
-                Credit Applied Invoices <span className="text-[#3b82f6] ml-1">{creditAppliedInvoicesRows.length}</span>
-              </div>
-              <ChevronDown
-                size={16}
-                className={`text-gray-500 transition-transform ${isCreditAppliedInvoicesOpen ? "rotate-180" : ""}`}
-              />
-            </button>
+          {creditAppliedInvoicesRows.length > 0 && (
+            <div className="w-full max-w-[1280px] mx-auto mb-3 border border-gray-200 rounded-md bg-white overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setIsCreditAppliedInvoicesOpen((prev) => !prev)}
+                className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50"
+              >
+                <div className="text-sm font-semibold text-gray-800">
+                  Credit Applied Invoices <span className="text-[#3b82f6] ml-1">{creditAppliedInvoicesRows.length}</span>
+                </div>
+                <ChevronDown
+                  size={16}
+                  className={`text-gray-500 transition-transform ${isCreditAppliedInvoicesOpen ? "rotate-180" : ""}`}
+                />
+              </button>
 
-            {isCreditAppliedInvoicesOpen && (
-              <div className="border-t border-gray-200">
-                <table className="w-full">
-                  <thead className="bg-[#f6f7fb]">
-                    <tr className="text-xs font-semibold text-[#697386]">
-                      <th className="text-left px-5 py-3">Date</th>
-                      <th className="text-left px-5 py-3">Invoice Number</th>
-                      <th className="text-left px-5 py-3">Amount Credited</th>
-                      <th className="text-right px-5 py-3" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {creditAppliedInvoicesRows.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="px-5 py-6 text-sm text-gray-500 text-center">
-                          No invoices have credits applied from this credit note.
-                        </td>
+              {isCreditAppliedInvoicesOpen && (
+                <div className="border-t border-gray-200">
+                  <table className="w-full">
+                    <thead className="bg-[#f6f7fb]">
+                      <tr className="text-xs font-semibold text-[#697386]">
+                        <th className="text-left px-5 py-3">Date</th>
+                        <th className="text-left px-5 py-3">Invoice Number</th>
+                        <th className="text-left px-5 py-3">Amount Credited</th>
+                        <th className="text-right px-5 py-3" />
                       </tr>
-                    ) : (
-                      creditAppliedInvoicesRows.map((row: any) => (
+                    </thead>
+                    <tbody>
+                      {creditAppliedInvoicesRows.map((row: any) => (
                         <tr key={row.rowKey} className="border-t border-gray-100 text-sm">
                           <td className="px-5 py-3 text-gray-800">{formatDate(row.date)}</td>
                           <td className="px-5 py-3">
@@ -1650,13 +1775,13 @@ Best regards`,
                             </button>
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="w-full max-w-[920px] mx-auto relative">
 
@@ -2664,6 +2789,53 @@ Best regards`,
             </div>
           </div>
         )}
+
+        {isDraftApplyConfirmOpen && (
+          <div className="fixed inset-0 z-[80] flex items-start justify-center bg-black/40 px-4 pt-24">
+            <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="border-b border-gray-100 p-6">
+                <div className="flex items-start gap-3">
+                  <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                    <AlertTriangle size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Open this draft credit note?</h3>
+                    <p className="mt-2 text-sm text-gray-600">
+                      This credit note is still a draft. Open it first, then continue to the apply-to-invoices workflow.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-3 bg-gray-50 px-6 py-4">
+                <button
+                  type="button"
+                  className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  onClick={() => setIsDraftApplyConfirmOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-[#156372] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f4f59]"
+                  onClick={handleConfirmDraftApply}
+                >
+                  Open
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <CreditNoteDeleteModal
+          isOpen={isDeleteConfirmOpen}
+          title="Delete credit note?"
+          message={`Are you sure you want to delete credit note ${creditNote?.creditNoteNumber || creditNote?.id}? This action cannot be undone.`}
+          confirmText={isDeletingCreditNote ? "Deleting..." : "Delete"}
+          confirmTone="danger"
+          onClose={() => setIsDeleteConfirmOpen(false)}
+          onConfirm={handleConfirmDelete}
+          confirmDisabled={isDeletingCreditNote}
+        />
 
         {/* Apply to Invoices Modal */}
         {isApplyToInvoicesOpen && (

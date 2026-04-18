@@ -119,9 +119,9 @@ export default function CustomerDetailHeader(args: any) {
 
             <div className="relative inline-flex" ref={newTransactionDropdownRef}>
               <button
-                className="flex h-8 min-w-[156px] cursor-pointer items-center justify-between gap-2 rounded-lg border-b-[4px] border-[#0D4A52] bg-[#156372] px-3.5 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
-                onClick={() => setIsNewTransactionDropdownOpen(!isNewTransactionDropdownOpen)}
-              >
+                  className="flex h-8 min-w-[156px] cursor-pointer items-center justify-between gap-2 rounded-lg border-b-[4px] border-[#0b5449] bg-[#0f6e60] px-3.5 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
+                  onClick={() => setIsNewTransactionDropdownOpen(!isNewTransactionDropdownOpen)}
+                >
                 <span className="flex items-center gap-2">
                   <Plus size={16} />
                   New Transaction

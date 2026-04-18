@@ -36,6 +36,7 @@ const requireOrgId = (req: express.Request, res: express.Response) => {
 };
 
 const normalizeRow = (row: any) => (row ? { ...row, id: String(row._id) } : row);
+const normalizeTerms = (body: any) => String(body?.termsAndConditions ?? body?.terms ?? "").trim();
 
 const pickSmtpSender = async (organizationId: any) => {
   const primary: any = await SenderEmail.findOne({
@@ -151,6 +152,11 @@ export const createCreditNote: express.RequestHandler = async (req, res) => {
       total: asNumber(req.body?.total),
       balance: asNumber(req.body?.balance ?? req.body?.total),
       status: String(req.body?.status || "open"),
+      subject: String(req.body?.subject || "").trim(),
+      termsAndConditions: normalizeTerms(req.body),
+      terms: normalizeTerms(req.body),
+      customerNotes: String(req.body?.customerNotes || req.body?.notes || "").trim(),
+      notes: String(req.body?.notes || req.body?.customerNotes || "").trim(),
     };
 
     const created = await CreditNote.create(payload);
@@ -180,6 +186,15 @@ export const updateCreditNote: express.RequestHandler = async (req, res) => {
   }
   if (req.body?.creditNoteDate || req.body?.date) {
     update.date = asDate(req.body?.creditNoteDate || req.body?.date) || update.date;
+  }
+  if (req.body?.subject !== undefined || req.body?.notes !== undefined || req.body?.customerNotes !== undefined) {
+    update.subject = String(req.body?.subject || "").trim();
+    update.customerNotes = String(req.body?.customerNotes || req.body?.notes || "").trim();
+    update.notes = String(req.body?.notes || req.body?.customerNotes || "").trim();
+  }
+  if (req.body?.termsAndConditions !== undefined || req.body?.terms !== undefined) {
+    update.termsAndConditions = normalizeTerms(req.body);
+    update.terms = normalizeTerms(req.body);
   }
 
   const updated = await CreditNote.findOneAndUpdate(

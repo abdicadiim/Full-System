@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { jsPDF } from "jspdf";
+import { toast } from "react-toastify";
 import {
   ChevronDown,
   Edit,
@@ -10,7 +11,7 @@ import {
   X,
   MessageCircle,
   Trash2,
-  FileText,
+  FileDown,
   ChevronRight,
   Paperclip,
   Plus,
@@ -472,7 +473,7 @@ export default function ExpenseDetail() {
       // Validate file size (10MB max)
       const validFiles = files.filter(file => file.size <= 10 * 1024 * 1024);
       if (validFiles.length !== files.length) {
-        alert("Some files exceed the 10MB limit and were not uploaded.");
+        toast.error("Some files exceed the 10MB limit and were not uploaded.");
       }
       if (validFiles.length > 0) {
         setUploadedFiles(prev => {
@@ -497,7 +498,7 @@ export default function ExpenseDetail() {
       // Validate file size (10MB max)
       const validFiles = files.filter(file => file.size <= 10 * 1024 * 1024);
       if (validFiles.length !== files.length) {
-        alert("Some files exceed the 10MB limit and were not uploaded.");
+        toast.error("Some files exceed the 10MB limit and were not uploaded.");
       }
       if (validFiles.length > 0) {
         setUploadedFiles(prev => {
@@ -690,21 +691,13 @@ export default function ExpenseDetail() {
   const statusValue = expense ? String(expense.status || "").toLowerCase() : "";
   const isBillableExpense = Boolean(expense?.is_billable) || statusValue === "billable" || statusValue === "unbilled";
 
-  const handleMakeRecurring = () => {
-    if (!expense) return;
-
-    // Navigate to create recurring expense with current expense data
-    navigate("/expenses/recurring-expenses/new", {
-      state: {
-        fromExpense: expense,
-        expenseAccount: expense.expenseAccount,
-        amount: expense.amount,
-        currency: expense.currency,
-        vendor: expense.vendor,
-        paidThrough: expense.paidThrough,
-      }
-    });
+  const getExpenseStatusClass = (value: any) => {
+    const status = String(value || "").trim().toLowerCase();
+    if (status === "invoiced") return "text-[#ff4d4f]";
+    if (status === "non-billable" || status === "unbilled" || status === "billable") return "text-[#3f5f8f]";
+    return "text-[#7f8ba3]";
   };
+
 
   const buildInvoiceItemsFromExpense = (sourceExpense: any) => {
     const rows =
@@ -752,13 +745,6 @@ export default function ExpenseDetail() {
 
   const handleConvertToInvoice = () => {
     if (!expense) return;
-
-    const hasCustomer = Boolean(expense.customer_id || expense.customerName);
-
-    if (!hasCustomer || !isBillableExpense) {
-      alert("This expense must be billable and linked to a customer before you can convert it to an invoice.");
-      return;
-    }
 
     const expenseItems = buildInvoiceItemsFromExpense(expense);
     navigate("/sales/invoices/new", {
@@ -863,7 +849,7 @@ export default function ExpenseDetail() {
         navigate("/expenses");
       } catch (error: any) {
         console.error("Failed to delete expense:", error);
-        alert(error?.message || "Failed to delete expense.");
+        toast.error(error?.message || "Failed to delete expense.");
       }
     };
 
@@ -909,7 +895,7 @@ export default function ExpenseDetail() {
     try {
       const sourceIdCandidates = getExpenseIdCandidates(expense);
       if (!sourceIdCandidates.length) {
-        alert("Cannot clone this expense because it has no ID.");
+        toast.error("Cannot clone this expense because it has no ID.");
         return;
       }
 
@@ -1026,10 +1012,10 @@ export default function ExpenseDetail() {
         return;
       }
 
-      alert("Expense cloned successfully, but it could not be opened automatically.");
+      toast.success("Expense cloned successfully, but it could not be opened automatically.");
     } catch (error: any) {
       console.error("Error cloning expense:", error);
-      alert(error?.message || "Failed to clone expense.");
+      toast.error(error?.message || "Failed to clone expense.");
     }
   };
 
@@ -1254,15 +1240,9 @@ export default function ExpenseDetail() {
                 </button>
               </>
             )}
-            <div className="w-px h-4 bg-gray-200 mx-0.5" />
-            <button className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-gray-700 bg-transparent border-none cursor-pointer font-medium" onClick={handleMakeRecurring}>
-              <RotateCw size={14} />
-              Make Recurring
-            </button>
-            <div className="w-px h-4 bg-gray-200 mx-0.5" />
             <button className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-gray-700 bg-transparent border-none cursor-pointer font-medium" onClick={handleExport}>
-              <FileText size={14} />
-              Print
+              <FileDown size={14} />
+              PDF
             </button>
             <div className="w-px h-4 bg-gray-200 mx-0.5" />
             <button
@@ -1298,7 +1278,7 @@ export default function ExpenseDetail() {
                       <span className="text-[37px] font-medium text-[#ff4e4e]">{(expense.currency || baseCurrencyCode || "AMD")}{amountValue}</span>
                       <span className="ml-2 text-[13px] text-[#55607a]">on {expense.date}</span>
                     </div>
-                    <div className="mt-1 text-sm uppercase text-[#7f8ba3]">{(expense.status || "UNBILLED").toUpperCase()}</div>
+                    <div className={`mt-1 text-sm uppercase ${getExpenseStatusClass(expense.status)}`}>{(expense.status || "UNBILLED").toUpperCase()}</div>
                     <div className="mt-6 inline-flex bg-[#c8e1eb] px-3 py-1 text-[13px] text-[#245a6b]">{expense.expenseAccount}</div>
                   </div>
 

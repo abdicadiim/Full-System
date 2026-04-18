@@ -87,6 +87,24 @@ const readStoredLocationOptions = () => {
   }
 };
 
+const sanitizeNumericInput = (value: any) => {
+  const raw = String(value ?? "");
+  const cleaned = raw.replace(/[^0-9.]/g, "");
+  const [whole, ...rest] = cleaned.split(".");
+  if (!whole && rest.length === 0) return "";
+  if (rest.length === 0) return whole;
+  return `${whole || "0"}.${rest.join("").replace(/\./g, "")}`;
+};
+
+const blockInvalidNumericKeys = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  if (["e", "E", "+", "-"].includes(event.key)) {
+    event.preventDefault();
+  }
+};
+
+const hasSelectedReceiptItems = (items: any[]) =>
+  Array.isArray(items) && items.some((item) => String(item?.itemId || "").trim());
+
 const normalizeReportingTagOptions = (tag) => {
   const sourceOptions = Array.isArray(tag?.options)
     ? tag.options
@@ -2281,10 +2299,53 @@ export default function NewSalesReceipt() {
     return { receiptData, customerEmail };
   };
 
+  const validateBeforeSave = () => {
+    if (!hasSelectedReceiptItems(formData.items)) {
+      toast.error("Please select at least one item before saving the sales receipt.");
+      return false;
+    }
+
+    const missingItems = (formData.items || []).filter((item) => !String(item?.itemId || "").trim());
+    if (missingItems.length > 0) {
+      toast.error("Please select an item for every receipt line before saving.");
+      return false;
+    }
+
+    return true;
+  };
+
+  const reserveReceiptNumberForSave = async () => {
+    try {
+      const response = await transactionNumberSeriesAPI.getNextNumber({
+        module: "Sales Receipt",
+        locationName: formData.selectedLocation || "Head Office",
+        reserve: true,
+      });
+      const nextNumber =
+        response?.data?.nextNumber ||
+        response?.data?.next_number ||
+        response?.data?.receiptNumber ||
+        response?.nextNumber ||
+        "";
+      return String(nextNumber || "").trim();
+    } catch (error) {
+      console.error("Error reserving sales receipt number:", error);
+      return "";
+    }
+  };
+
   const handleSave = async () => {
     try {
+      if (!validateBeforeSave()) return;
       setSaveLoading("draft");
-      const { receiptData } = buildReceiptPayload("paid");
+      let receiptData = buildReceiptPayload("paid").receiptData;
+      if (!isEditMode) {
+        const reservedNumber = await reserveReceiptNumberForSave();
+        if (reservedNumber) {
+          receiptData = { ...receiptData, receiptNumber: reservedNumber };
+          setFormData((prev) => ({ ...prev, receiptNumber: reservedNumber }));
+        }
+      }
       const savedReceipt = isEditMode
         ? await updateSalesReceipt(id, receiptData)
         : await saveSalesReceipt(receiptData);
@@ -2292,8 +2353,26 @@ export default function NewSalesReceipt() {
       toast.success("Sales receipt saved successfully.");
       navigate(`/sales/sales-receipts/${receiptId}`);
     } catch (error) {
+      const errorMessage = String((error as any)?.message || (error as any)?.response?.message || "");
+      const isDuplicate = /duplicate|already exists|e11000|receiptnumber/i.test(errorMessage);
+      if (!isEditMode && isDuplicate) {
+        try {
+          const retryNumber = await reserveReceiptNumberForSave();
+          if (retryNumber) {
+            const retryPayload = { ...buildReceiptPayload("paid").receiptData, receiptNumber: retryNumber };
+            setFormData((prev) => ({ ...prev, receiptNumber: retryNumber }));
+            const savedReceipt = await saveSalesReceipt(retryPayload);
+            const receiptId = savedReceipt?.id || savedReceipt?._id || id;
+            toast.success("Sales receipt saved successfully.");
+            navigate(`/sales/sales-receipts/${receiptId}`);
+            return;
+          }
+        } catch (retryError) {
+          console.error("Retry after duplicate receipt number failed:", retryError);
+        }
+      }
       console.error("Error saving sales receipt:", error);
-      toast.error("Failed to save sales receipt. Please try again.");
+      toast.error(errorMessage || "Failed to save sales receipt. Please try again.");
     } finally {
       setSaveLoading(null);
     }
@@ -2301,8 +2380,16 @@ export default function NewSalesReceipt() {
 
   const handleSaveAndSend = async () => {
     try {
+      if (!validateBeforeSave()) return;
       setSaveLoading("send");
-      const { receiptData } = buildReceiptPayload("paid");
+      let receiptData = buildReceiptPayload("paid").receiptData;
+      if (!isEditMode) {
+        const reservedNumber = await reserveReceiptNumberForSave();
+        if (reservedNumber) {
+          receiptData = { ...receiptData, receiptNumber: reservedNumber };
+          setFormData((prev) => ({ ...prev, receiptNumber: reservedNumber }));
+        }
+      }
       const savedReceipt = isEditMode
         ? await updateSalesReceipt(id, receiptData)
         : await saveSalesReceipt(receiptData);
@@ -2324,8 +2411,9 @@ export default function NewSalesReceipt() {
       });
       toast.success("Sales receipt saved and ready to send.");
     } catch (error) {
+      const errorMessage = String((error as any)?.message || (error as any)?.response?.message || "");
       console.error("Error saving/sending sales receipt:", error);
-      toast.error("Failed to save and send sales receipt. Please try again.");
+      toast.error(errorMessage || "Failed to save and send sales receipt. Please try again.");
     } finally {
       setSaveLoading(null);
     }
@@ -2457,8 +2545,7 @@ export default function NewSalesReceipt() {
   };
 
   return (
-
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-[#f8fafc]">
+    <div className="w-full h-screen overflow-hidden bg-[#f8fafc] flex flex-col">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -3007,7 +3094,7 @@ export default function NewSalesReceipt() {
               </div>
             )}
 
-            <div className="overflow-hidden rounded-b-xl border border-[#dfe6ef] border-t-0 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.04)]">
+            <div className="overflow-visible rounded-b-xl border border-[#dfe6ef] border-t-0 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.04)]">
             <table className="w-full border-collapse text-sm">
               <colgroup>
                 {isBulkUpdateMode && <col className="w-12" />}
@@ -3142,7 +3229,7 @@ export default function NewSalesReceipt() {
                           )}
 
                           {openItemDropdowns[item.id] && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
+                            <div className="absolute top-full left-0 right-0 z-[200] mt-1 max-h-80 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
                               {getFilteredItems(item.id).length > 0 ? (
                                 getFilteredItems(item.id).map((productItem, idx) => {
                                   const isHighlighted =
@@ -3203,9 +3290,11 @@ export default function NewSalesReceipt() {
                       <td className="border-r border-[#edf1f5] p-3 align-top">
                         <input
                           type="number"
+                          inputMode="decimal"
+                          onKeyDown={blockInvalidNumericKeys}
                           value={item.quantity}
-                          onChange={(e) => handleItemChange(item.id, "quantity", parseFloat(e.target.value) || 0)}
-                          className={`w-full px-3 py-2 text-sm text-gray-800 focus:outline-none ${item.itemId ? "border border-transparent bg-transparent text-center" : "rounded-lg border border-[#dbe2ea] focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"}`}
+                          onChange={(e) => handleItemChange(item.id, "quantity", sanitizeNumericInput(e.target.value))}
+                          className={`w-full px-3 py-2 text-sm text-gray-800 focus:outline-none ${item.itemId ? "border border-transparent bg-transparent text-center" : "border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-[#2563eb] focus:border-[#2563eb]"}`}
                           min="0"
                           step="0.01"
                         />
@@ -3233,9 +3322,11 @@ export default function NewSalesReceipt() {
                       <td className="border-r border-[#edf1f5] p-3 align-top">
                         <input
                           type="number"
+                          inputMode="decimal"
+                          onKeyDown={blockInvalidNumericKeys}
                           value={item.rate}
-                          onChange={(e) => handleItemChange(item.id, "rate", parseFloat(e.target.value) || 0)}
-                          className={`w-full px-3 py-2 text-sm text-gray-700 focus:outline-none ${item.itemId ? "border border-transparent bg-transparent text-right" : "rounded-lg border border-[#dbe2ea] focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"}`}
+                          onChange={(e) => handleItemChange(item.id, "rate", sanitizeNumericInput(e.target.value))}
+                          className={`w-full px-3 py-2 text-sm text-gray-700 focus:outline-none ${item.itemId ? "border border-transparent bg-transparent text-right" : "border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-[#2563eb] focus:border-[#2563eb]"}`}
                           min="0"
                           step="0.01"
                         />
@@ -3248,9 +3339,11 @@ export default function NewSalesReceipt() {
                         <div className="flex items-center border-2 border-gray-200 rounded-lg bg-white overflow-hidden focus-within:ring-2 focus-within:ring-[#2563eb] focus-within:border-[#2563eb] h-[38px]">
                           <input
                             type="number"
+                            inputMode="decimal"
+                            onKeyDown={blockInvalidNumericKeys}
                             className="w-full px-2 py-2 text-sm text-right focus:outline-none"
                             value={item.discount}
-                            onChange={(e) => handleItemChange(item.id, "discount", parseFloat(e.target.value) || 0)}
+                            onChange={(e) => handleItemChange(item.id, "discount", sanitizeNumericInput(e.target.value))}
                             min="0"
                             step="0.01"
                           />
@@ -3823,10 +3916,12 @@ export default function NewSalesReceipt() {
                     <span className="text-sm text-gray-600">Discount</span>
                     <div className="flex items-center border border-gray-300 rounded bg-white overflow-hidden">
                       <input
-                        type="text"
+                        type="number"
+                        inputMode="decimal"
+                        onKeyDown={blockInvalidNumericKeys}
                         className="w-12 px-2 py-0.5 text-sm text-right focus:outline-none"
                         value={formData.discount}
-                        onChange={(e) => handleSummaryChange("discount", e.target.value)}
+                        onChange={(e) => handleSummaryChange("discount", sanitizeNumericInput(e.target.value))}
                       />
                       <div className="relative border-l border-gray-200" ref={discountTypeDropdownRef}>
                         <button
@@ -3880,9 +3975,11 @@ export default function NewSalesReceipt() {
                         <span className="text-sm text-gray-600">Shipping Charge</span>
                         <input
                           type="number"
+                          inputMode="decimal"
+                          onKeyDown={blockInvalidNumericKeys}
                           className="w-20 px-2 py-0.5 border border-gray-300 rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-[#2563eb] focus:border-[#2563eb]"
                           value={formData.shippingCharges}
-                          onChange={(e) => handleSummaryChange("shippingCharges", parseFloat(e.target.value) || 0)}
+                          onChange={(e) => handleSummaryChange("shippingCharges", sanitizeNumericInput(e.target.value))}
                         />
                         <div className="border border-gray-400 rounded-full p-0.5">
                           <Info size={10} className="text-gray-500" />
@@ -4007,9 +4104,11 @@ export default function NewSalesReceipt() {
                     </div>
                     <input
                       type="number"
+                      inputMode="decimal"
+                      onKeyDown={blockInvalidNumericKeys}
                       className="w-20 px-2 py-0.5 border border-gray-300 rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-[#2563eb] focus:border-[#2563eb]"
                       value={formData.adjustment}
-                      onChange={(e) => handleSummaryChange("adjustment", parseFloat(e.target.value) || 0)}
+                      onChange={(e) => handleSummaryChange("adjustment", sanitizeNumericInput(e.target.value))}
                     />
                     <div className="border border-gray-400 rounded-full p-0.5">
                       <Info size={10} className="text-gray-500" />
@@ -4223,16 +4322,14 @@ export default function NewSalesReceipt() {
               className={`px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded text-[13px] font-semibold transition-colors shadow-sm cursor-pointer flex items-center gap-2 ${saveLoading ? "opacity-70 cursor-not-allowed" : ""}`}
               onClick={handleSave}
             >
-              {saveLoading === "draft" ? <Loader2 size={14} className="animate-spin" /> : null}
-              {saveLoading === "draft" ? "Saving..." : "Save"}
+              Save
             </button>
             <button
               disabled={saveLoading !== null}
               className={`px-4 py-2 bg-[#156372] border border-[#156372] text-white rounded text-[13px] font-semibold hover:bg-[#0D4A52] transition-colors shadow-sm cursor-pointer flex items-center gap-2 ${saveLoading ? "opacity-70 cursor-not-allowed" : ""}`}
               onClick={handleSaveAndSend}
             >
-              {saveLoading === "send" ? <Loader2 size={14} className="animate-spin" /> : null}
-              {saveLoading === "send" ? "Saving..." : "Save and Send"}
+              Save and Send
             </button>
             <button
               className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded text-[13px] font-semibold hover:bg-gray-50 transition-colors"

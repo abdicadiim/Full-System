@@ -1157,6 +1157,7 @@ export default function RecordExpense() {
     vendor_id: "",
     reference: "",
     notes: "",
+    status: "non-billable",
     customerName: "",
     customer_id: "",
     projectName: "",
@@ -1365,6 +1366,7 @@ export default function RecordExpense() {
           vendor_id: editExpense.vendor_id || "",
           reference: editExpense.reference || "",
           notes: editExpense.notes || "",
+          status: String(editExpense.status || (editExpense.is_billable ? "unbilled" : "non-billable")).toLowerCase(),
           customerName: editExpense.customerName || "",
           customer_id: editExpense.customer_id || "",
           projectName: editExpense.projectName || editExpense.project_name || editExpense.project?.name || "",
@@ -1423,6 +1425,7 @@ export default function RecordExpense() {
           vendor_id: clonedData.vendor_id || "",
           reference: "",
           notes: clonedData.notes || "",
+          status: String(clonedData.status || (clonedData.is_billable ? "unbilled" : "non-billable")).toLowerCase(),
           customerName: clonedData.customerName || "",
           customer_id: clonedData.customer_id || "",
           projectName: clonedData.projectName || clonedData.project_name || clonedData.project?.name || "",
@@ -1746,7 +1749,7 @@ export default function RecordExpense() {
         }
 
         if (successCount > 0) {
-          alert(`${successCount} expenses saved successfully!${errorMessages.length > 0 ? `\nErrors: ${errorMessages.join(', ')}` : ''}`);
+          toast.success(`${successCount} expenses saved successfully!${errorMessages.length > 0 ? ` Errors: ${errorMessages.join(', ')}` : ''}`);
           window.dispatchEvent(new Event("expensesUpdated"));
 
           if (navigateAway) {
@@ -1754,12 +1757,12 @@ export default function RecordExpense() {
           }
           return true;
         } else {
-          alert(`Failed to save expenses: ${errorMessages.join(', ')}`);
+          toast.error(`Failed to save expenses: ${errorMessages.join(', ')}`);
           return false;
         }
       } catch (error: any) {
         console.error("Error saving bulk expenses:", error);
-        alert(error?.message || "Error creating bulk expenses. Please try again.");
+        toast.error(error?.message || "Error creating bulk expenses. Please try again.");
         return false;
       } finally {
         setSaveLoadingState(null);
@@ -1777,14 +1780,14 @@ export default function RecordExpense() {
       if (rowIndex >= 0) {
         setItemRowTagsOpenIndex(rowIndex);
       }
-      alert("Please fill in all mandatory reporting tags before saving.");
+      toast.error("Please fill in all mandatory reporting tags before saving.");
       setSaveLoadingState(null);
       return false;
     }
 
     // Validate required fields for single expense
     if (!formData.date || !formData.expenseAccount || !formData.amount || !formData.paidThrough) {
-      alert("Please fill in all required fields (Date, Expense Account, Amount, Paid Through)");
+      toast.error("Please fill in all required fields (Date, Expense Account, Amount, Paid Through)");
       setSaveLoadingState(null);
       return false;
     }
@@ -1857,7 +1860,7 @@ export default function RecordExpense() {
         expenseData.customer_id = formData.customer_id;
       }
       expenseData.is_billable = !!(formData.customer_id && formData.billable);
-      expenseData.status = expenseData.is_billable ? "unbilled" : "non-billable";
+      expenseData.status = formData.customer_id && formData.billable ? "unbilled" : "non-billable";
 
       if (expenseData.is_billable && isObjectId(formData.project_id)) {
         expenseData.project_id = formData.project_id;
@@ -1922,7 +1925,7 @@ export default function RecordExpense() {
         // Generate journal entry for the expense
         await generateJournalEntry(expenseData);
 
-        alert("Expense saved successfully!");
+        toast.success("Expense saved successfully!");
         window.dispatchEvent(new Event("expensesUpdated"));
 
         if (navigateAway) {
@@ -1930,12 +1933,12 @@ export default function RecordExpense() {
         }
         return true;
       } else {
-        alert(response?.message || "Error creating expense");
+        toast.error(response?.message || "Error creating expense");
         return false;
       }
     } catch (error: any) {
       console.error("Error saving expense:", error);
-      alert(error?.message || "Error creating expense. Please try again.");
+      toast.error(error?.message || "Error creating expense. Please try again.");
       return false;
     } finally {
       setSaveLoadingState(null);
@@ -3126,10 +3129,10 @@ export default function RecordExpense() {
                                     setLocationOpen(false);
                                     setLocationSearch("");
                                   }}
-                                  className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between ${selected ? "bg-[#156372] text-white" : "text-gray-700 hover:bg-[#156372] hover:text-white"}`}
+                                  className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between ${selected ? "bg-gray-50 text-gray-900" : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"}`}
                                 >
                                   <span>{loc}</span>
-                                  {selected && <Check size={14} className="text-white" />}
+                                  {selected && <Check size={14} className="text-gray-700" />}
                                 </button>
                               );
                             })}
@@ -3746,7 +3749,7 @@ export default function RecordExpense() {
 
                   <div className="grid grid-cols-[160px_1fr] items-center gap-4">
                     <label className="text-sm font-medium text-gray-900">Customer Name</label>
-                    <div className="max-w-[560px] flex items-center gap-0">
+                    <div className="max-w-[560px] flex items-center gap-2">
                       <div className="flex-1 relative" ref={customerRef}>
                         <button
                           type="button"
@@ -3796,6 +3799,7 @@ export default function RecordExpense() {
                                           customerName: displayName,
                                           customer_id: c._id || c.id || "",
                                           billable: c ? prev.billable : false,
+                                          status: prev.billable ? "unbilled" : "non-billable",
                                           projectName: "",
                                           project_id: "",
                                         }));
@@ -3838,6 +3842,19 @@ export default function RecordExpense() {
                         )}
                       </div>
                       <button onClick={() => setCustomerSearchModalOpen(true)} className="h-[38px] px-3 bg-[#156372] text-white rounded-r-md rounded-l-none hover:bg-[#0D4A52] transition-colors" type="button"><Search size={16} /></button>
+                      <label className="ml-1 flex items-center gap-2 text-sm text-gray-700 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={!!formData.billable}
+                          onChange={(e) => setFormData((prev) => ({
+                            ...prev,
+                            billable: e.target.checked,
+                            status: e.target.checked && prev.customer_id ? "unbilled" : "non-billable",
+                          }))}
+                          className="h-4 w-4 cursor-pointer accent-[#156372]"
+                        />
+                        Billable
+                      </label>
                     </div>
                   </div>
 
@@ -3889,7 +3906,7 @@ export default function RecordExpense() {
                                       setProjectOpen(false);
                                       setProjectSearch("");
                                     }}
-                                    className={`w-full px-3 py-2 text-left text-sm ${selected ? "bg-[#156372] text-white" : "text-gray-700 hover:bg-[#156372] hover:text-white"}`}
+                                    className={`w-full px-3 py-2 text-left text-sm ${selected ? "bg-gray-50 text-gray-900" : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"}`}
                                   >
                                     {project.name}
                                   </button>
@@ -3904,7 +3921,7 @@ export default function RecordExpense() {
                       </div>
                     </div>
                   )}
-                  {formData.billable && formData.customer_id && (
+                  {formData.customer_id && (
                     <div className="grid grid-cols-[160px_1fr] items-center gap-4">
                       <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
                         Mark up by <Info size={13} className="text-gray-400" />
@@ -4037,10 +4054,10 @@ export default function RecordExpense() {
                                     setLocationOpen(false);
                                     setLocationSearch("");
                                   }}
-                                  className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between ${selected ? "bg-[#156372] text-white" : "text-gray-700 hover:bg-[#156372] hover:text-white"}`}
+                                  className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between ${selected ? "bg-gray-50 text-gray-900" : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"}`}
                                 >
                                   <span>{loc}</span>
-                                  {selected && <Check size={14} className="text-white" />}
+                                  {selected && <Check size={14} className="text-gray-700" />}
                                 </button>
                               );
                             })}
@@ -4201,13 +4218,13 @@ export default function RecordExpense() {
                                   <div
                                     key={account}
                                     onClick={() => handleExpenseAccountSelect(account)}
-                                    className={`w-full px-6 py-2 text-sm cursor-pointer flex items-center justify-between transition-colors ${isSelected
-                                      ? "text-[#156372] font-medium hover:bg-[#156372] hover:text-white"
-                                      : "text-gray-700 hover:bg-[#156372] hover:text-white"
+                                  className={`w-full px-6 py-2 text-sm cursor-pointer flex items-center justify-between transition-colors ${isSelected
+                                      ? "text-gray-900 font-medium bg-gray-50"
+                                      : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
                                       }`}
                                   >
                                     <span>{account}</span>
-                                    {isSelected && <Check size={14} className="text-[#156372]" />}
+                                    {isSelected && <Check size={14} className="text-gray-700" />}
                                   </div>
                                 );
                               })
@@ -4253,8 +4270,8 @@ export default function RecordExpense() {
                                         setAmountCurrencyOpen(false);
                                       }}
                                       className={`w-full px-3 py-2 text-left text-sm ${selected
-                                        ? "text-[#156372] font-medium hover:bg-[#156372] hover:text-white"
-                                        : "text-gray-700 hover:bg-[#156372] hover:text-white"
+                                        ? "bg-gray-50 text-gray-900 font-medium"
+                                        : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
                                         }`}
                                     >
                                       {currency.code}
@@ -4565,7 +4582,7 @@ export default function RecordExpense() {
                   {/* Customer Name */}
                   <div className="grid grid-cols-[180px_1fr] items-center gap-4">
                     <label className="text-sm font-medium text-gray-700">Customer Name</label>
-                    <div className="max-w-[560px] flex items-center gap-0">
+                    <div className="max-w-[560px] flex items-center gap-2">
                       <div className="flex-1 relative" ref={customerRef}>
                         <div
                           className="w-full rounded-l-md rounded-r-none border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 flex items-center justify-between cursor-pointer focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
@@ -4614,12 +4631,13 @@ export default function RecordExpense() {
                                         onClick={() => {
                                           setFormData((prev) => ({
                                             ...prev,
-                                            customerName: displayName,
-                                            customer_id: c._id || c.id || "",
-                                            billable: c ? prev.billable : false,
-                                            projectName: "",
-                                            project_id: "",
-                                          }));
+                                          customerName: displayName,
+                                          customer_id: c._id || c.id || "",
+                                          billable: c ? prev.billable : false,
+                                          status: prev.billable ? "unbilled" : "non-billable",
+                                          projectName: "",
+                                          project_id: "",
+                                        }));
                                           setCustomerProjects([]);
                                           setCustomerOpen(false);
                                         }}
@@ -4648,7 +4666,7 @@ export default function RecordExpense() {
                             </div>
                             <button
                               type="button"
-                              className="w-full border-t border-gray-200 px-3 py-2 text-left text-sm text-[#156372] hover:bg-[#156372] hover:text-white flex items-center gap-2"
+                            className="w-full border-t border-gray-200 px-3 py-2 text-left text-sm text-[#156372] hover:bg-gray-50 hover:text-gray-900 flex items-center gap-2"
                               onClick={() => {
                                 openNewCustomerQuickAction();
                               }}
@@ -4665,6 +4683,19 @@ export default function RecordExpense() {
                       >
                         <Search size={16} />
                       </button>
+                      <label className="ml-1 flex items-center gap-2 text-sm text-gray-700 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={!!formData.billable}
+                          onChange={(e) => setFormData((prev) => ({
+                            ...prev,
+                            billable: e.target.checked,
+                            status: e.target.checked && prev.customer_id ? "unbilled" : "non-billable",
+                          }))}
+                          className="h-4 w-4 cursor-pointer accent-[#156372]"
+                        />
+                        Billable
+                      </label>
                     </div>
                   </div>
 
@@ -4830,7 +4861,7 @@ export default function RecordExpense() {
                     );
                   })()}
 
-                  {formData.customer_id && (
+                  {formData.billable && formData.customer_id && (
                     <div className="grid grid-cols-[180px_1fr] items-center gap-4">
                       <label className="text-sm font-medium text-gray-700">Projects</label>
                       <div className="max-w-[460px] relative" ref={projectRef}>
@@ -4878,7 +4909,7 @@ export default function RecordExpense() {
                                       setProjectOpen(false);
                                       setProjectSearch("");
                                     }}
-                                    className={`w-full px-3 py-2 text-left text-sm ${selected ? "bg-[#156372] text-white" : "text-gray-700 hover:bg-[#156372] hover:text-white"}`}
+                                    className={`w-full px-3 py-2 text-left text-sm ${selected ? "bg-gray-50 text-gray-900" : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"}`}
                                   >
                                     {project.name}
                                   </button>

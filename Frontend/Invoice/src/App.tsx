@@ -12,6 +12,10 @@ import { Toaster } from 'react-hot-toast'
 export default function App() {
   const location = useLocation()
   const isPublicSenderVerification = location.pathname.startsWith('/sender-verification')
+  const isExpenseRoute =
+    location.pathname.startsWith('/expenses') ||
+    location.pathname.startsWith('/purchases/expenses') ||
+    location.pathname.startsWith('/purchases/recurring-expenses')
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -72,7 +76,7 @@ export default function App() {
             pauseOnHover
             draggable
           />
-          <Toaster position="top-right" />
+          {!isExpenseRoute && <Toaster position="top-right" />}
         </SettingsProvider>
       </ThemeProvider>
     </UserProvider>
