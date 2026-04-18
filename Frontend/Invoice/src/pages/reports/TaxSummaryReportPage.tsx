@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
   CalendarDays,
   Check,
   ChevronDown,
+  ChevronRight,
   Columns3,
   Filter,
+  Folder,
   Menu,
   Plus,
   RefreshCw,
@@ -15,7 +17,7 @@ import {
 import ReportCustomizeColumnsModal, {
   type ColumnGroup,
 } from "./ReportCustomizeColumnsModal";
-import { getCategoryById, getReportById } from "./reportsCatalog";
+import { REPORTS_BY_CATEGORY, getCategoryById, getReportById } from "./reportsCatalog";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import { getCreditNotes, getInvoices, getTaxes } from "../salesModel";
 
@@ -70,12 +72,41 @@ const RANGE_OPTIONS: DateRangePreset[] = [
   "Custom",
 ];
 
+const MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+const CALENDAR_YEAR_OPTIONS = Array.from(
+  { length: 31 },
+  (_, index) => new Date().getFullYear() - 10 + index,
+);
+
 const fmtDate = (value: Date) =>
   value.toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "short",
     year: "numeric",
   });
+const formatPickerDate = (value: string) => {
+  const parsed = parseInput(value);
+  if (!parsed) return "";
+  return parsed.toLocaleDateString("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+  });
+};
 const toInput = (value: Date) =>
   `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 const parseInput = (value: string) => {
@@ -83,6 +114,284 @@ const parseInput = (value: string) => {
   const [y, m, d] = value.split("-").map(Number);
   return y && m && d ? new Date(y, m - 1, d) : null;
 };
+const addMonths = (value: Date, delta: number) =>
+  new Date(value.getFullYear(), value.getMonth() + delta, 1);
+const getStartOfMonth = (value: Date) => new Date(value.getFullYear(), value.getMonth(), 1);
+const isSameDay = (left: Date, right: Date) =>
+  left.getFullYear() === right.getFullYear() &&
+  left.getMonth() === right.getMonth() &&
+  left.getDate() === right.getDate();
+const isSameMonth = (left: Date, right: Date) =>
+  left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth();
+const buildCalendarGrid = (month: Date) => {
+  const firstOfMonth = getStartOfMonth(month);
+  const firstDay = new Date(firstOfMonth);
+  firstDay.setDate(firstDay.getDate() - firstDay.getDay());
+  const days: Date[] = [];
+  for (let week = 0; week < 6; week += 1) {
+    for (let day = 0; day < 7; day += 1) {
+      const next = new Date(firstDay);
+      next.setDate(firstDay.getDate() + week * 7 + day);
+      days.push(next);
+    }
+  }
+  const weeks: Date[][] = [];
+  for (let index = 0; index < days.length; index += 7) {
+    weeks.push(days.slice(index, index + 7));
+  }
+  return weeks;
+};
+
+type ReportsDrawerSection = {
+  id: string;
+  label: string;
+  reportIds: string[];
+};
+
+const REPORTS_DRAWER_SECTIONS: ReportsDrawerSection[] = [
+  {
+    id: "sales",
+    label: "Sales",
+    reportIds: ["sales-by-customer", "sales-by-item", "sales-by-sales-person"],
+  },
+  {
+    id: "receivables",
+    label: "Receivables",
+    reportIds: [
+      "ar-aging-summary",
+      "ar-aging-details",
+      "invoice-details",
+      "quote-details",
+      "bad-debts",
+      "bank-charges",
+      "customer-balance-summary",
+      "receivable-summary",
+      "receivable-details",
+    ],
+  },
+  {
+    id: "payments-received",
+    label: "Payments Received",
+    reportIds: [
+      "payments-received",
+      "time-to-get-paid",
+      "credit-note-details",
+      "refund-history",
+      "withholding-tax",
+    ],
+  },
+  {
+    id: "purchases-expenses",
+    label: "Purchases and Expenses",
+    reportIds: [
+      "expense-details",
+      "expenses-by-category",
+      "expenses-by-customer",
+      "expenses-by-project",
+      "billable-expense-details",
+    ],
+  },
+  {
+    id: "taxes",
+    label: "Taxes",
+    reportIds: ["tax-summary"],
+  },
+  {
+    id: "projects-timesheets",
+    label: "Projects and Timesheet",
+    reportIds: [
+      "timesheet-details",
+      "project-summary",
+      "project-details",
+      "projects-revenue-summary",
+    ],
+  },
+  {
+    id: "activity",
+    label: "Activity",
+    reportIds: [
+      "system-mails",
+      "activity-logs-audit-trail",
+      "exception-report",
+      "portal-activities",
+      "customer-reviews",
+    ],
+  },
+];
+
+function ReportsDrawer({
+  open,
+  currentCategoryId,
+  currentReportId,
+  triggerRef,
+  onClose,
+}: {
+  open: boolean;
+  currentCategoryId: string;
+  currentReportId: string;
+  triggerRef: React.RefObject<HTMLButtonElement | null>;
+  onClose: () => void;
+}) {
+  const drawerRef = useRef<HTMLDivElement | null>(null);
+  const [search, setSearch] = useState("");
+  const [expandedSections, setExpandedSections] = useState<string[]>([
+    currentCategoryId,
+  ]);
+
+  useEffect(() => {
+    setExpandedSections((prev) =>
+      prev.includes(currentCategoryId) ? prev : [currentCategoryId],
+    );
+  }, [currentCategoryId]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        !drawerRef.current?.contains(target) &&
+        !triggerRef.current?.contains(target)
+      ) {
+        onClose();
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose, open, triggerRef]);
+
+  const sections = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return REPORTS_DRAWER_SECTIONS.map((section) => {
+      const available = REPORTS_BY_CATEGORY[section.id] || [];
+      const reports = section.reportIds
+        .map((reportId) => available.find((report) => report.id === reportId))
+        .filter(Boolean) as typeof available;
+
+      const filteredReports = query
+        ? reports.filter(
+            (report) =>
+              report.name.toLowerCase().includes(query) ||
+              section.label.toLowerCase().includes(query),
+          )
+        : reports;
+
+      return { ...section, reports: filteredReports };
+    }).filter((section) => section.reports.length > 0);
+  }, [search]);
+
+  if (!open) return null;
+
+  const isSearching = search.trim().length > 0;
+
+  return (
+    <div
+      ref={drawerRef}
+      className="absolute left-0 top-0 z-30 h-full w-[260px] overflow-hidden border-r border-[#e5e7eb] bg-white shadow-[8px_0_20px_rgba(15,23,42,0.08)]"
+    >
+      <div className="flex h-full flex-col">
+        <div className="flex items-center justify-between border-b border-[#eef2f7] px-4 py-3">
+          <div className="text-[18px] font-semibold text-[#0f172a]">
+            Reports
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-7 w-7 items-center justify-center text-[#ef4444] hover:bg-[#fef2f2]"
+            aria-label="Close reports drawer"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="border-b border-[#eef2f7] px-3 py-3">
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search reports"
+            className="h-9 w-full rounded-lg border border-[#d8dfea] bg-white px-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#7da0ff]"
+          />
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-2 py-2">
+          <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
+            All Reports
+          </div>
+
+          {sections.length > 0 ? (
+            <div className="space-y-1">
+              {sections.map((section) => {
+                const expanded =
+                  isSearching || expandedSections.includes(section.id);
+
+                return (
+                  <div key={section.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isSearching) return;
+                        setExpandedSections((prev) =>
+                          prev.includes(section.id) ? [] : [section.id],
+                        );
+                      }}
+                      className="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm text-[#111827] hover:bg-[#f8fafc]"
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Folder size={14} className="text-[#9aa3b2]" />
+                        <span className="truncate">{section.label}</span>
+                      </span>
+                      {expanded ? (
+                        <ChevronDown size={12} className="text-[#9aa3b2]" />
+                      ) : (
+                        <ChevronRight size={12} className="text-[#9aa3b2]" />
+                      )}
+                    </button>
+
+                    {expanded ? (
+                      <div className="ml-5 mt-1 space-y-0.5">
+                        {section.reports.map((report) => {
+                          const isActive = report.id === currentReportId;
+                          return (
+                            <Link
+                              key={report.id}
+                              to={`/reports/${report.categoryId}/${report.id}`}
+                              onClick={onClose}
+                              className={`block rounded px-2 py-1.5 text-sm hover:bg-[#eef4ff] ${
+                                isActive
+                                  ? "bg-[#eef4ff] font-medium text-[#111827]"
+                                  : "text-[#111827] hover:text-black"
+                              }`}
+                            >
+                              {report.name}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="px-2 py-4 text-sm text-[#64748b]">
+              No reports found.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 const startDay = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate());
 const endDay = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate(), 23, 59, 59, 999);
 const monthStart = (value: Date) => new Date(value.getFullYear(), value.getMonth(), 1);
@@ -294,20 +603,25 @@ export default function TaxSummaryReportPage() {
   const report = getReportById(resolvedCategoryId, "tax-summary");
   const { settings } = useSettings();
 
-  const [selectedRange, setSelectedRange] = useState<DateRangePreset>("This Month");
-  const [draftRange, setDraftRange] = useState<DateRangePreset>("This Month");
-  const [customRange, setCustomRange] = useState<DateRangeValue>(() => {
+  const [dateRangeKey, setDateRangeKey] = useState<DateRangePreset>("This Month");
+  const [dateRangeDraftKey, setDateRangeDraftKey] = useState<DateRangePreset>("This Month");
+  const [customDateRange, setCustomDateRange] = useState<DateRangeValue>(() => {
     const now = new Date();
     return { start: toInput(monthStart(now)), end: toInput(monthEnd(now)) };
   });
-  const [customDraft, setCustomDraft] = useState<DateRangeValue>(() => {
+  const [customDateRangeDraft, setCustomDateRangeDraft] = useState<DateRangeValue>(() => {
     const now = new Date();
     return { start: toInput(monthStart(now)), end: toInput(monthEnd(now)) };
   });
-  const [isRangeOpen, setIsRangeOpen] = useState(false);
+  const [customDateRangeMonth, setCustomDateRangeMonth] = useState<Date>(() =>
+    getStartOfMonth(new Date()),
+  );
+  const [isDateRangeOpen, setIsDateRangeOpen] = useState(false);
+  const [isCustomDateRangeOpen, setIsCustomDateRangeOpen] = useState(false);
   const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isCustomizeColumnsOpen, setIsCustomizeColumnsOpen] = useState(false);
+  const [isReportsDrawerOpen, setIsReportsDrawerOpen] = useState(false);
   const [selectedColumns, setSelectedColumns] = useState<string[]>(
     TAX_REPORT_COLUMNS,
   );
@@ -315,62 +629,139 @@ export default function TaxSummaryReportPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
-  const filterRef = useRef<HTMLDivElement>(null);
+  const dateRangeRef = useRef<HTMLDivElement>(null);
   const moreFiltersRef = useRef<HTMLDivElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
 
   const organizationName = String(settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "").trim();
   const currencyCode = String(settings?.general?.currencyCode || settings?.general?.baseCurrency || settings?.general?.currency || "SOS").trim() || "SOS";
   const reportName = report?.name || "Tax Summary";
   const closeTarget = `/reports/${resolvedCategoryId}`;
-  const bounds = useMemo(() => rangeBounds(selectedRange, customRange), [customRange.end, customRange.start, selectedRange]);
+  const bounds = useMemo(
+    () => rangeBounds(dateRangeKey, customDateRange),
+    [customDateRange.end, customDateRange.start, dateRangeKey],
+  );
   const label = useMemo(() => rangeLabel(bounds), [bounds]);
   const visibleColumns = selectedColumns.length > 0 ? selectedColumns : TAX_REPORT_COLUMNS;
 
   if (!category || !report) return <Navigate to="/reports" replace />;
 
   const closeMenus = () => {
-    setIsRangeOpen(false);
+    setIsDateRangeOpen(false);
+    setIsCustomDateRangeOpen(false);
     setIsMoreFiltersOpen(false);
     setIsExportOpen(false);
     setIsCustomizeColumnsOpen(false);
-    setDraftRange(selectedRange);
-    setCustomDraft(customRange);
+    setIsReportsDrawerOpen(false);
+    setDateRangeDraftKey(dateRangeKey);
+    setCustomDateRangeDraft(customDateRange);
+    setCustomDateRangeMonth(getStartOfMonth(parseInput(customDateRange.start) || new Date()));
   };
 
-  const openRange = () => {
+  const openDateRangeDropdown = () => {
     setIsMoreFiltersOpen(false);
     setIsExportOpen(false);
     setIsCustomizeColumnsOpen(false);
-    setDraftRange(selectedRange);
-    setCustomDraft(customRange);
-    setIsRangeOpen((current) => !current);
+    setIsReportsDrawerOpen(false);
+    if (isDateRangeOpen) {
+      setIsDateRangeOpen(false);
+      setIsCustomDateRangeOpen(false);
+      return;
+    }
+    const currentRange =
+      dateRangeKey === "Custom"
+        ? {
+            start: parseInput(customDateRange.start) || monthStart(new Date()),
+            end: parseInput(customDateRange.end) || monthEnd(new Date()),
+          }
+        : bounds;
+    setDateRangeDraftKey(dateRangeKey);
+    setCustomDateRangeDraft({
+      start: toInput(currentRange.start),
+      end: toInput(currentRange.end),
+    });
+    setCustomDateRangeMonth(getStartOfMonth(currentRange.start));
+    setIsCustomDateRangeOpen(dateRangeKey === "Custom");
+    setIsDateRangeOpen(true);
+  };
+
+  const cancelDateRangeSelection = () => {
+    setDateRangeDraftKey(dateRangeKey);
+    setCustomDateRangeDraft(customDateRange);
+    setCustomDateRangeMonth(getStartOfMonth(parseInput(customDateRange.start) || new Date()));
+    setIsCustomDateRangeOpen(false);
+    setIsDateRangeOpen(false);
   };
 
   const applyPreset = (preset: DateRangePreset) => {
     if (preset === "Custom") {
-      setDraftRange("Custom");
-      setCustomDraft(customRange);
-      setIsRangeOpen(true);
+      const currentRange =
+        dateRangeKey === "Custom"
+          ? {
+              start: parseInput(customDateRange.start) || monthStart(new Date()),
+              end: parseInput(customDateRange.end) || monthEnd(new Date()),
+            }
+          : bounds;
+      setDateRangeDraftKey("Custom");
+      setCustomDateRangeDraft({
+        start: toInput(currentRange.start),
+        end: toInput(currentRange.end),
+      });
+      setCustomDateRangeMonth(getStartOfMonth(currentRange.start));
+      setIsCustomDateRangeOpen(true);
+      setIsDateRangeOpen(true);
       return;
     }
-    setSelectedRange(preset);
-    setDraftRange(preset);
-    setIsRangeOpen(false);
+    setDateRangeKey(preset);
+    setDateRangeDraftKey(preset);
+    setIsDateRangeOpen(false);
+    setIsCustomDateRangeOpen(false);
   };
 
-  const applyCustom = () => {
-    setSelectedRange("Custom");
-    setDraftRange("Custom");
-    setCustomRange(customDraft);
-    setIsRangeOpen(false);
+  const applyCustomDateRange = () => {
+    setDateRangeKey("Custom");
+    setDateRangeDraftKey("Custom");
+    setCustomDateRange(customDateRangeDraft);
+    setIsDateRangeOpen(false);
+    setIsCustomDateRangeOpen(false);
+  };
+
+  const handleCustomStartDateClick = (date: Date) => {
+    setCustomDateRangeDraft((prev) => {
+      const end = parseInput(prev.end) || date;
+      const start = date <= end ? date : end;
+      return {
+        start: toInput(start),
+        end: toInput(end),
+      };
+    });
+  };
+
+  const handleCustomEndDateClick = (date: Date) => {
+    setCustomDateRangeDraft((prev) => {
+      const start = parseInput(prev.start) || date;
+      const end = date < start ? start : date;
+      return {
+        start: toInput(start),
+        end: toInput(end),
+      };
+    });
+  };
+
+  const setLeftCalendarMonth = (monthIndex: number, year: number) => {
+    setCustomDateRangeMonth(new Date(year, monthIndex, 1));
+  };
+
+  const setRightCalendarMonth = (monthIndex: number, year: number) => {
+    setCustomDateRangeMonth(addMonths(new Date(year, monthIndex, 1), -1));
   };
 
   useEffect(() => {
     const handler = (event: MouseEvent) => {
       const target = event.target as Node | null;
       if (
-        (filterRef.current && target && filterRef.current.contains(target)) ||
+        (dateRangeRef.current && target && dateRangeRef.current.contains(target)) ||
         (moreFiltersRef.current && target && moreFiltersRef.current.contains(target)) ||
         (exportRef.current && target && exportRef.current.contains(target))
       ) return;
@@ -378,7 +769,17 @@ export default function TaxSummaryReportPage() {
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [customRange, selectedRange]);
+  }, [customDateRange, dateRangeKey]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeMenus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [customDateRange, dateRangeKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -432,8 +833,15 @@ export default function TaxSummaryReportPage() {
 
   return (
     <>
-      <div className="relative min-h-[calc(100vh-64px)] overflow-visible bg-[#f8fafc] px-4 py-3">
-      <div className="mx-auto w-full max-w-[1500px]">
+      <div className={`relative min-h-[calc(100vh-64px)] overflow-visible bg-[#f8fafc] px-0 py-3 ${isReportsDrawerOpen ? "lg:pl-[260px]" : ""}`}>
+        <ReportsDrawer
+          open={isReportsDrawerOpen}
+          currentCategoryId={resolvedCategoryId}
+          currentReportId="tax-summary"
+          triggerRef={menuButtonRef}
+          onClose={() => setIsReportsDrawerOpen(false)}
+        />
+      <div className="w-full">
         <section className="rounded-lg border border-[#d7dce7] bg-white">
           <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3">
             <div className="min-w-0">
@@ -442,7 +850,9 @@ export default function TaxSummaryReportPage() {
               </div>
               <div className="flex min-w-0 items-baseline gap-2">
                 <button
+                  ref={menuButtonRef}
                   type="button"
+                  onClick={() => setIsReportsDrawerOpen((current) => !current)}
                   className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[#d4d9e4] bg-white text-[#334155] hover:bg-[#f8fafc]"
                   aria-label="Open reports menu"
                 >
@@ -464,7 +874,7 @@ export default function TaxSummaryReportPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setIsRangeOpen(false);
+                    setIsDateRangeOpen(false);
                     setIsExportOpen((current) => !current);
                   }}
                   className="inline-flex h-8 items-center gap-1 rounded border border-[#d4d9e4] bg-white px-3 text-sm font-medium text-[#1e293b] hover:bg-[#f8fafc]"
@@ -529,105 +939,269 @@ export default function TaxSummaryReportPage() {
               <span>Filters :</span>
             </span>
 
-            <div ref={filterRef} className="relative">
+            <div ref={dateRangeRef} className="relative">
               <button
                 type="button"
-                onClick={openRange}
+                onClick={openDateRangeDropdown}
                 className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm text-[#334155] hover:bg-white ${
-                  isRangeOpen
-                    ? "border-[#1b6f7b] bg-white"
+                  isDateRangeOpen
+                    ? "border-[#156372] bg-white"
                     : "border-[#cfd6e4] bg-[#f8fafc]"
                 }`}
                 aria-haspopup="menu"
-                aria-expanded={isRangeOpen}
+                aria-expanded={isDateRangeOpen}
               >
                 <CalendarDays size={14} className="text-[#64748b]" />
-                Date Range : <span className="font-medium">{selectedRange}</span>
+                Date Range : <span className="font-medium">{dateRangeKey}</span>{" "}
                 <ChevronDown size={14} />
               </button>
 
-              {isRangeOpen ? (
-                <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[280px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
-                  <div className="max-h-[260px] overflow-y-auto p-1">
-                    {RANGE_OPTIONS.map((option) => {
-                      const selected = draftRange === option;
-                      return (
-                        <button
-                          key={option}
-                          type="button"
-                          onClick={() => applyPreset(option)}
-                          className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm ${
-                            selected
-                              ? "font-medium text-[#0f172a]"
-                              : "text-[#334155] hover:bg-[#f8fafc]"
-                          }`}
-                        >
-                          <span>{option}</span>
-                          {selected ? <Check size={14} className="text-[#1b6f7b]" /> : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {draftRange === "Custom" ? (
-                    <div className="border-t border-[#eef2f7] p-3">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
-                            Start Date
-                          </div>
-                          <input
-                            type="date"
-                            value={customDraft.start}
-                            onChange={(event) =>
-                              setCustomDraft((current) => ({
-                                ...current,
-                                start: event.target.value,
-                              }))
-                            }
-                            className="h-9 w-full rounded border border-[#d4d9e4] px-2 text-sm outline-none focus:border-[#1b6f7b]"
-                          />
-                        </div>
-                        <div>
-                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
-                            End Date
-                          </div>
-                          <input
-                            type="date"
-                            value={customDraft.end}
-                            onChange={(event) =>
-                              setCustomDraft((current) => ({
-                                ...current,
-                                end: event.target.value,
-                              }))
-                            }
-                            className="h-9 w-full rounded border border-[#d4d9e4] px-2 text-sm outline-none focus:border-[#1b6f7b]"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="mt-3 flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsRangeOpen(false);
-                            setDraftRange(selectedRange);
-                            setCustomDraft(customRange);
-                          }}
-                          className="inline-flex h-8 items-center rounded border border-[#d4d9e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={applyCustom}
-                          className="inline-flex h-8 items-center rounded bg-[#1b6f7b] px-3 text-sm font-semibold text-white hover:bg-[#155963]"
-                        >
-                          Apply
-                        </button>
+              {isDateRangeOpen ? (
+                <div
+                  className={`absolute left-0 top-[calc(100%+6px)] z-40 overflow-visible rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)] ${
+                    isCustomDateRangeOpen ? "w-[680px]" : "w-[165px]"
+                  }`}
+                >
+                  <div className="flex">
+                    <div className="w-[165px] border-r border-[#eef2f7]">
+                      <div className="max-h-[280px] overflow-y-auto py-1">
+                        {RANGE_OPTIONS.map((option) => {
+                          const selected = dateRangeDraftKey === option;
+                          return (
+                            <button
+                              key={option}
+                              type="button"
+                              onClick={() => applyPreset(option)}
+                              className={`flex w-full items-center justify-between px-4 py-2 text-left text-sm ${
+                                selected
+                                  ? "font-medium text-[#0f172a]"
+                                  : "text-[#334155] hover:bg-[#f8fafc]"
+                              }`}
+                            >
+                              <span>{option}</span>
+                              {selected ? (
+                                <Check size={14} className="text-[#0f172a]" />
+                              ) : null}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
-                  ) : null}
+
+                    {isCustomDateRangeOpen ? (
+                      <div className="flex-1 p-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
+                              Start Date
+                            </div>
+                            <div className="relative">
+                              <CalendarDays
+                                size={14}
+                                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#64748b]"
+                              />
+                              <input
+                                type="text"
+                                readOnly
+                                value={formatPickerDate(customDateRangeDraft.start)}
+                                className="h-10 w-full rounded border border-[#156372] bg-white pl-9 pr-3 text-sm text-[#334155] outline-none"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
+                              End Date
+                            </div>
+                            <div className="relative">
+                              <CalendarDays
+                                size={14}
+                                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#64748b]"
+                              />
+                              <input
+                                type="text"
+                                readOnly
+                                value={formatPickerDate(customDateRangeDraft.end)}
+                                className="h-10 w-full rounded border border-[#156372] bg-white pl-9 pr-3 text-sm text-[#334155] outline-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-[1fr_1fr] gap-3">
+                          {[
+                            { month: customDateRangeMonth, side: "start" as const },
+                            { month: addMonths(customDateRangeMonth, 1), side: "end" as const },
+                          ].map(({ month, side }) => {
+                            const monthLabel = month.toLocaleDateString("en-US", {
+                              month: "short",
+                              year: "numeric",
+                            });
+                            const weeks = buildCalendarGrid(month);
+
+                            return (
+                              <div
+                                key={`${side}-${monthLabel}`}
+                                className="rounded-lg border border-[#eef2f7] bg-white p-2"
+                              >
+                                <div className="mb-2 flex items-center justify-between gap-2 px-1">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setCustomDateRangeMonth((prev) =>
+                                        addMonths(prev, -1),
+                                      )
+                                    }
+                                    className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-[#f8fafc]"
+                                    aria-label="Previous month"
+                                  >
+                                    <ChevronRight
+                                      size={14}
+                                      className="rotate-180 text-[#64748b]"
+                                    />
+                                  </button>
+
+                                  <div className="flex items-center gap-1">
+                                    <select
+                                      value={month.getMonth()}
+                                      onChange={(event) =>
+                                        side === "start"
+                                          ? setLeftCalendarMonth(
+                                              Number(event.target.value),
+                                              month.getFullYear(),
+                                            )
+                                          : setRightCalendarMonth(
+                                              Number(event.target.value),
+                                              month.getFullYear(),
+                                            )
+                                      }
+                                      className="h-6 rounded border border-[#cfd6e4] bg-white px-1 text-[11px] text-[#334155] outline-none"
+                                    >
+                                      {MONTH_NAMES.map((monthName, index) => (
+                                        <option key={monthName} value={index}>
+                                          {monthName}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <select
+                                      value={month.getFullYear()}
+                                      onChange={(event) =>
+                                        side === "start"
+                                          ? setLeftCalendarMonth(
+                                              month.getMonth(),
+                                              Number(event.target.value),
+                                            )
+                                          : setRightCalendarMonth(
+                                              month.getMonth(),
+                                              Number(event.target.value),
+                                            )
+                                      }
+                                      className="h-6 rounded border border-[#cfd6e4] bg-white px-1 text-[11px] text-[#334155] outline-none"
+                                    >
+                                      {CALENDAR_YEAR_OPTIONS.map((year) => (
+                                        <option key={year} value={year}>
+                                          {year}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setCustomDateRangeMonth((prev) =>
+                                        addMonths(prev, 1),
+                                      )
+                                    }
+                                    className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-[#f8fafc]"
+                                    aria-label="Next month"
+                                  >
+                                    <ChevronRight size={14} className="text-[#64748b]" />
+                                  </button>
+                                </div>
+
+                                <table className="w-full table-fixed border-collapse text-center text-[11px]">
+                                  <thead>
+                                    <tr className="text-[#156372]">
+                                      {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
+                                        <th key={day} className="pb-1 font-semibold">
+                                          {day}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {weeks.map((week, weekIndex) => (
+                                      <tr key={`${side}-week-${weekIndex}`}>
+                                        {week.map((day) => {
+                                          const inCurrentMonth = isSameMonth(day, month);
+                                          const startDate = parseInput(customDateRangeDraft.start);
+                                          const endDate = parseInput(customDateRangeDraft.end);
+                                          const isStart = startDate ? isSameDay(day, startDate) : false;
+                                          const isEnd = endDate ? isSameDay(day, endDate) : false;
+                                          const inRange =
+                                            startDate && endDate
+                                              ? day >= startDate && day <= endDate
+                                              : false;
+                                          const isToday = isSameDay(day, new Date());
+
+                                          return (
+                                            <td key={day.toISOString()} className="p-0">
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  side === "start"
+                                                    ? handleCustomStartDateClick(day)
+                                                    : handleCustomEndDateClick(day)
+                                                }
+                                                className={`m-[1px] flex h-7 w-full items-center justify-center rounded text-[11px] ${
+                                                  !inCurrentMonth
+                                                    ? "text-[#cbd5e1]"
+                                                    : isStart || isEnd
+                                                      ? "bg-[#156372] font-semibold text-white"
+                                                      : inRange
+                                                        ? "bg-[#d9eff1] text-[#0f172a]"
+                                                        : "text-[#334155] hover:bg-[#f8fafc]"
+                                                } ${isToday && !isStart && !isEnd ? "ring-1 ring-inset ring-[#156372]/30" : ""}`}
+                                              >
+                                                {day.getDate()}
+                                              </button>
+                                            </td>
+                                          );
+                                        })}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          <div className="text-xs text-[#64748b]">
+                            {formatPickerDate(customDateRangeDraft.start)} -{" "}
+                            {formatPickerDate(customDateRangeDraft.end)}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={cancelDateRangeSelection}
+                              className="inline-flex h-8 items-center rounded border border-[#d4d9e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={applyCustomDateRange}
+                              className="inline-flex h-8 items-center rounded bg-[#156372] px-3 text-sm font-semibold text-white hover:bg-[#0f4a52]"
+                            >
+                              Apply
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
             </div>

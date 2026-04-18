@@ -22,6 +22,9 @@ import {
 import ScheduleReportModal from "./ScheduleReportModal";
 import ReportCustomizeColumnsModal from "./ReportCustomizeColumnsModal";
 import ReportCompareWithPopover from "./ReportCompareWithPopover";
+import ExpensesByProjectReportPage from "./ExpensesByProjectReportPage";
+import BillableExpenseDetailsReportPage from "./BillableExpenseDetailsReportPage";
+import TaxSummaryReportPage from "./TaxSummaryReportPage";
 import { getReportColumnGroups } from "./reportColumnSetup";
 import { getCategoryById, getReportById, REPORTS, REPORT_CATEGORIES } from "./reportsCatalog";
 import { getPayments } from "../sales/salesModel";
@@ -144,6 +147,8 @@ const DATE_RANGE_PRESETS: DateRangePreset[] = [
   "Custom",
 ];
 
+const CALENDAR_YEAR_OPTIONS = Array.from({ length: 120 }, (_, index) => 2007 + index);
+
 const ENTITY_OPTIONS_BY_CATEGORY: Record<string, string[]> = {
   sales: ["Invoice", "Credit Note", "Sales Receipt"],
   receivables: ["Invoice", "Credit Note", "Retainer Invoice", "Quote", "Bad Debts"],
@@ -209,6 +214,13 @@ const parseReportDate = (value: unknown) => {
   const date = value instanceof Date ? value : new Date(String(value));
   return Number.isNaN(date.getTime()) ? null : date;
 };
+
+const formatPickerDate = (value: Date) =>
+  value.toLocaleDateString("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+  });
 
 const getTimeToGetPaidBucketLabel = (days: number) => {
   if (days <= 15) return "0 - 15 Days";
@@ -2010,6 +2022,7 @@ export default function ReportDetailPage() {
   const resolvedReportId = customReport?.sourceReportId || reportId || "";
   const isAgingReport = resolvedReportId === "ar-aging-summary" || resolvedReportId === "ar-aging-details";
   const isTimeToGetPaidReport = resolvedReportId === "time-to-get-paid";
+  const isExpensesByProjectReport = resolvedReportId === "expenses-by-project";
   const category = getCategoryById(resolvedCategoryId);
   const report = getReportById(resolvedCategoryId, resolvedReportId);
   const reportDisplayName = customReport?.name || report?.name || "Report";
@@ -2306,6 +2319,16 @@ export default function ReportDetailPage() {
     [getPreviewCell, visiblePreviewColumns, visiblePreviewTotals]
   );
   const isExportDisabled = livePreviewLoading || !preview || visiblePreviewColumns.length === 0;
+
+  if (resolvedReportId === "billable-expense-details") {
+    return <BillableExpenseDetailsReportPage />;
+  }
+  if (resolvedReportId === "tax-summary") {
+    return <TaxSummaryReportPage />;
+  }
+  if (resolvedReportId === "expenses-by-project") {
+    return <ExpensesByProjectReportPage />;
+  }
 
   const downloadReportPdf = async () => {
     const [{ jsPDF }, html2canvasModule] = await Promise.all([import("jspdf"), import("html2canvas")]);
@@ -2688,12 +2711,12 @@ export default function ReportDetailPage() {
                 setOpenMoreFilterComparatorRowId(null);
                 setActiveFilterDropdown((prev) => (prev === "date-range" ? null : "date-range"));
               }}
-              className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm transition-colors ${
+            className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm transition-colors ${
                 isDateRangeOpen ? "border-[#156372] bg-white text-[#156372] shadow-sm" : "border-[#cfd6e4] bg-white text-[#334155] hover:border-[#156372] hover:text-[#156372]"
               }`}
-            >
-              Date Range : <span className="font-medium">{selectedDateRange === "Custom" ? "Custom" : selectedDateRange}</span> <ChevronDown size={14} />
-            </button>
+          >
+            Date Range : <span className="font-medium">{selectedDateRange === "Custom" ? "Custom" : selectedDateRange}</span> <ChevronDown size={14} />
+          </button>
           ) : null}
           {!isTimeToGetPaidReport ? (
             <button
@@ -2758,6 +2781,7 @@ export default function ReportDetailPage() {
             >
               <div className={`shrink-0 overflow-auto bg-white p-1 ${dateRangeView === "custom" ? "h-[320px] w-[150px] border-r border-[#edf1f7]" : "max-h-[320px] w-full"}`}>
                 {DATE_RANGE_PRESETS.map((preset) => {
+                  const isSelected = selectedDateRange === preset;
                   return (
                     <button
                       key={preset}
@@ -2771,95 +2795,239 @@ export default function ReportDetailPage() {
                           setDateRangeView("custom");
                         }
                       }}
-                      className="flex w-full items-center rounded-[8px] px-3 py-2 text-left text-[14px] text-[#334155] transition-colors hover:bg-[#f3f7f9]"
+                      className={`flex w-full items-center justify-between rounded-[8px] px-3 py-2 text-left text-[14px] transition-colors ${
+                        isSelected ? "font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f3f7f9]"
+                      }`}
                     >
-                      {preset}
+                      <span>{preset}</span>
+                      {isSelected ? <Check size={14} className="text-[#0f172a]" /> : null}
                     </button>
                   );
                 })}
               </div>
 
-              {dateRangeView === "custom" ? (
-                <div className="flex-1 bg-white p-4">
-                  <div className="space-y-4">
-                    <div className="flex gap-3">
-                      <input
-                        type="date"
-                        value={customRange.start}
-                        onChange={(event) => setCustomRange((prev) => ({ ...prev, start: event.target.value }))}
-                        className="h-10 w-full rounded-[8px] border border-[#d8deea] px-3 text-sm outline-none focus:border-[#156372]"
-                      />
-                      <input
-                        type="date"
-                        value={customRange.end}
-                        onChange={(event) => setCustomRange((prev) => ({ ...prev, end: event.target.value }))}
-                        className="h-10 w-full rounded-[8px] border border-[#d8deea] px-3 text-sm outline-none focus:border-[#156372]"
-                      />
+                            {dateRangeView === "custom" ? (
+                <div className="flex-1 p-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">Start Date</div>
+                      <div className="relative">
+                        <CalendarDays size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#64748b]" />
+                        <input
+                          type="text"
+                          readOnly
+                          value={formatPickerDate(parseReportDate(customRange.start) || new Date())}
+                          className="h-10 w-full rounded border border-[#156372] bg-white pl-9 pr-3 text-sm text-[#334155] outline-none"
+                        />
+                      </div>
                     </div>
+                    <div>
+                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">End Date</div>
+                      <div className="relative">
+                        <CalendarDays size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#64748b]" />
+                        <input
+                          type="text"
+                          readOnly
+                          value={formatPickerDate(parseReportDate(customRange.end) || new Date())}
+                          className="h-10 w-full rounded border border-[#156372] bg-white pl-9 pr-3 text-sm text-[#334155] outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      {[currentMonthStart, nextMonthStart].map((monthDate) => {
-                        const monthGrid = monthDate.getMonth() === currentMonthStart.getMonth() ? currentMonthGrid : nextMonthGrid;
-                        const monthTitle = `${monthNames[monthDate.getMonth()]} ${monthDate.getFullYear()}`;
-                        return (
-                          <div key={monthTitle} className="rounded-[10px] border border-[#edf1f7] p-3">
-                            <div className="mb-3 flex items-center justify-between text-sm font-medium text-[#334155]">
-                              <span>{monthTitle}</span>
-                              <span className="text-[#94a3b8]">•</span>
-                            </div>
-                            <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-[#3b82f6]">
-                              {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
-                                <span key={`${monthTitle}-${day}`}>{day}</span>
-                              ))}
-                            </div>
-                            <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[12px]">
-                              {monthGrid.map((day, index) => {
-                                if (!day) {
-                                  return <span key={`${monthTitle}-blank-${index}`} className="h-8" />;
+                  <div className="mt-3 grid grid-cols-[1fr_1fr] gap-3">
+                    {[currentMonthStart, nextMonthStart].map((monthDate, monthIndex) => {
+                      const isStartMonth = monthIndex === 0;
+                      const monthGrid = monthDate.getMonth() === currentMonthStart.getMonth() ? currentMonthGrid : nextMonthGrid;
+                      const monthTitle = `${monthNames[monthDate.getMonth()]} ${monthDate.getFullYear()}`;
+                      const startDate = parseDate(customRange.start) || new Date();
+                      const endDate = parseDate(customRange.end) || new Date();
+
+                      return (
+                        <div key={monthTitle} className="rounded-[10px] border border-[#edf1f7] p-2">
+                          <div className="mb-2 flex items-center justify-between gap-2 px-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const base = isStartMonth ? startDate : endDate;
+                                const previous = new Date(base.getFullYear(), base.getMonth() - 1, base.getDate());
+                                if (isStartMonth) {
+                                  setCustomRange((prev) => ({ ...prev, start: toIsoDate(previous) }));
+                                } else {
+                                  setCustomRange((prev) => ({ ...prev, end: toIsoDate(previous) }));
                                 }
+                              }}
+                              className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-[#f8fafc]"
+                              aria-label="Previous month"
+                            >
+                              <ChevronRight size={14} className="rotate-180 text-[#64748b]" />
+                            </button>
 
-                                const current = new Date(monthDate.getFullYear(), monthDate.getMonth(), day);
-                                const isInRange = current >= clampDate(customStart, customStart, customEnd) && current <= clampDate(customEnd, customStart, customEnd);
-                                const isStart = toIsoDate(current) === toIsoDate(customStart);
-                                const isEnd = toIsoDate(current) === toIsoDate(customEnd);
+                            <div className="flex items-center gap-1">
+                              <select
+                                value={monthDate.getMonth()}
+                                onChange={(event) => {
+                                  const month = Number(event.target.value);
+                                  if (isStartMonth) {
+                                    setCustomRange((prev) => {
+                                      const base = parseDate(prev.start) || new Date();
+                                      return { ...prev, start: toIsoDate(new Date(base.getFullYear(), month, base.getDate())) };
+                                    });
+                                  } else {
+                                    setCustomRange((prev) => {
+                                      const base = parseDate(prev.end) || new Date();
+                                      return { ...prev, end: toIsoDate(new Date(base.getFullYear(), month, base.getDate())) };
+                                    });
+                                  }
+                                }}
+                                className="h-6 rounded border border-[#cfd6e4] bg-white px-1 text-[11px] text-[#334155] outline-none"
+                              >
+                                {monthNames.map((monthName, index) => (
+                                  <option key={monthName} value={index}>
+                                    {monthName}
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                value={monthDate.getFullYear()}
+                                onChange={(event) => {
+                                  const year = Number(event.target.value);
+                                  if (isStartMonth) {
+                                    setCustomRange((prev) => {
+                                      const base = parseDate(prev.start) || new Date();
+                                      return { ...prev, start: toIsoDate(new Date(year, base.getMonth(), base.getDate())) };
+                                    });
+                                  } else {
+                                    setCustomRange((prev) => {
+                                      const base = parseDate(prev.end) || new Date();
+                                      return { ...prev, end: toIsoDate(new Date(year, base.getMonth(), base.getDate())) };
+                                    });
+                                  }
+                                }}
+                                className="h-6 rounded border border-[#cfd6e4] bg-white px-1 text-[11px] text-[#334155] outline-none"
+                              >
+                                {CALENDAR_YEAR_OPTIONS.map((year) => (
+                                  <option key={year} value={year}>
+                                    {year}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
 
-                                return (
-                                  <span
-                                    key={`${monthTitle}-${day}`}
-                                    className={`flex h-8 items-center justify-center rounded-[6px] ${
-                                      isStart || isEnd
-                                        ? "bg-[#156372] text-white shadow-sm"
-                                        : isInRange
-                                          ? "bg-[#d8ece8] text-[#156372]"
-                                          : "text-[#334155]"
-                                    }`}
-                                  >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const base = isStartMonth ? startDate : endDate;
+                                const next = new Date(base.getFullYear(), base.getMonth() + 1, base.getDate());
+                                if (isStartMonth) {
+                                  setCustomRange((prev) => ({ ...prev, start: toIsoDate(next) }));
+                                } else {
+                                  setCustomRange((prev) => ({ ...prev, end: toIsoDate(next) }));
+                                }
+                              }}
+                              className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-[#f8fafc]"
+                              aria-label="Next month"
+                            >
+                              <ChevronRight size={14} className="text-[#64748b]" />
+                            </button>
+                          </div>
+
+                          <table className="w-full table-fixed border-collapse text-center text-[11px]">
+                            <thead>
+                              <tr className="text-[#156372]">
+                                {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
+                                  <th key={day} className="pb-1 font-semibold">
                                     {day}
-                                  </span>
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {Array.from({ length: Math.ceil(monthGrid.length / 7) }, (_, weekIndex) => weekIndex).map((weekIndex) => {
+                                const week = monthGrid.slice(weekIndex * 7, weekIndex * 7 + 7);
+                                return (
+                                  <tr key={`${monthTitle}-week-${weekIndex}`}>
+                                    {week.map((day, dayIndex) => {
+                                      if (day === null) {
+                                        return (
+                                          <td key={`${monthTitle}-blank-${weekIndex}-${dayIndex}`} className="p-0">
+                                            <span className="flex h-7 w-full items-center justify-center" />
+                                          </td>
+                                        );
+                                      }
+
+                                      const current = new Date(monthDate.getFullYear(), monthDate.getMonth(), day);
+                                      const isInRange =
+                                        current >= clampDate(startDate, startDate, endDate) &&
+                                        current <= clampDate(endDate, startDate, endDate);
+                                      const isStart = toIsoDate(current) === toIsoDate(startDate);
+                                      const isEnd = toIsoDate(current) === toIsoDate(endDate);
+                                      const isToday = toIsoDate(current) === toIsoDate(new Date());
+                                      const isInCurrentMonth = current.getMonth() === monthDate.getMonth();
+
+                                      return (
+                                        <td key={`${monthTitle}-${day}`} className="p-0">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              if (isStartMonth) {
+                                                setCustomRange((prev) => ({
+                                                  ...prev,
+                                                  start: toIsoDate(current),
+                                                  end: current > endDate ? toIsoDate(current) : prev.end,
+                                                }));
+                                              } else {
+                                                setCustomRange((prev) => ({
+                                                  ...prev,
+                                                  start: current < startDate ? toIsoDate(current) : prev.start,
+                                                  end: toIsoDate(current),
+                                                }));
+                                              }
+                                            }}
+                                            className={`m-[1px] flex h-7 w-full items-center justify-center rounded text-[11px] ${
+                                              !isInCurrentMonth
+                                                ? "text-[#cbd5e1]"
+                                                : isStart || isEnd
+                                                  ? "bg-[#156372] font-semibold text-white"
+                                                  : isInRange
+                                                    ? "bg-[#d9eff1] text-[#0f172a]"
+                                                    : "text-[#334155] hover:bg-[#f8fafc]"
+                                            } ${isToday && !isStart && !isEnd ? "ring-1 ring-inset ring-[#156372]/30" : ""}`}
+                                          >
+                                            {day}
+                                          </button>
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
                                 );
                               })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })}
+                  </div>
 
-                    <div className="flex items-center justify-between pt-2 text-sm">
-                      <span className="text-[#475569]">
-                        {customRange.start || customRange.end ? `${customRange.start} - ${customRange.end}` : ""}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button type="button" onClick={() => setActiveFilterDropdown(null)} className="rounded-[8px] px-3 py-1.5 text-[#334155] hover:bg-[#f3f7f9]">
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setActiveFilterDropdown(null)}
-                          className="rounded-[8px] bg-[#156372] px-4 py-1.5 font-semibold text-white hover:bg-[#0f4f5b]"
-                        >
-                          Apply
-                        </button>
-                      </div>
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    <div className="text-xs text-[#64748b]">
+                      {customRange.start} - {customRange.end}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setActiveFilterDropdown(null)}
+                        className="inline-flex h-8 items-center rounded border border-[#d4d9e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveFilterDropdown(null)}
+                        className="inline-flex h-8 items-center rounded bg-[#156372] px-3 text-sm font-semibold text-white hover:bg-[#0f4a52]"
+                      >
+                        Apply
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -3283,3 +3451,4 @@ export default function ReportDetailPage() {
     </div>
   );
 }
+

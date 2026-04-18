@@ -284,37 +284,43 @@ type DateRangeKey =
   | "previous-year"
   | "all-time"
   | "custom";
-type GroupByKey = "none" | "status" | "category" | "customer-name";
+type GroupByKey = "none";
 type ColumnKey =
-  | "Status"
   | "Date"
-  | "Reference#"
-  | "Category"
-  | "Customer Name"
-  | "Amount"
-  | "Amount With Tax";
+  | "Transaction#"
+  | "Vendor Name"
+  | "Item Name"
+  | "Item Amount (BCY)"
+  | "Markup (%)"
+  | "Invoice Item Amount (BCY)"
+  | "Marked Up Amount"
+  | "Gross Profit";
 type DateRangeValue = { start: Date; end: Date };
 type ExpenseRow = {
   id: string;
-  status: string;
   dateValue: Date | null;
   dateLabel: string;
-  reference: string;
-  category: string;
-  customerName: string;
-  amount: number;
-  amountWithTax: number;
+  transactionNumber: string;
+  vendorName: string;
+  itemName: string;
+  itemAmount: number;
+  markupPercent: number;
+  invoiceItemAmount: number;
+  markedUpAmount: number;
+  grossProfit: number;
   currency: string;
 };
 
 const COLUMNS: ColumnKey[] = [
-  "Status",
   "Date",
-  "Reference#",
-  "Category",
-  "Customer Name",
-  "Amount",
-  "Amount With Tax",
+  "Transaction#",
+  "Vendor Name",
+  "Item Name",
+  "Item Amount (BCY)",
+  "Markup (%)",
+  "Invoice Item Amount (BCY)",
+  "Marked Up Amount",
+  "Gross Profit",
 ];
 
 const COLUMN_GROUPS: ColumnGroup[] = [{ label: "Reports", items: COLUMNS }];
@@ -351,12 +357,7 @@ const MONTH_NAMES = [
 
 const CALENDAR_YEAR_OPTIONS = Array.from({ length: 120 }, (_, index) => 2007 + index);
 
-const GROUP_OPTIONS: Array<{ key: GroupByKey; label: string }> = [
-  { key: "none", label: "None" },
-  { key: "status", label: "Status" },
-  { key: "category", label: "Category" },
-  { key: "customer-name", label: "Customer Name" },
-];
+const GROUP_OPTIONS: Array<{ key: GroupByKey; label: string }> = [{ key: "none", label: "None" }];
 
 const fmtDate = (value: Date) =>
   value.toLocaleDateString("en-GB", {
@@ -486,14 +487,14 @@ const inRange = (value: Date, range: DateRangeValue) =>
 const formatMoney = (value: number, currency: string) =>
   `${normalizeCurrency(currency)}${Number(value || 0).toFixed(2)}`;
 
-export default function ExpenseDetailsReportPage() {
+export default function BillableExpenseDetailsReportPage() {
   const navigate = useNavigate();
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const dateRangeRef = useRef<HTMLDivElement | null>(null);
   const { categoryId, reportId } = useParams();
   const { settings } = useSettings() as any;
   const category = getCategoryById(categoryId || "purchases-expenses");
-  const report = getReportById(categoryId || "purchases-expenses", reportId || "expense-details");
+  const report = getReportById(categoryId || "purchases-expenses", reportId || "billable-expense-details");
   const organizationName = String(
     settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "",
   ).trim();
@@ -523,14 +524,12 @@ export default function ExpenseDetailsReportPage() {
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   const [groupBy, setGroupBy] = useState<GroupByKey>("none");
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [customerFilter, setCustomerFilter] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
-  const [referenceFilter, setReferenceFilter] = useState("");
+  const [vendorFilter, setVendorFilter] = useState("");
+  const [itemFilter, setItemFilter] = useState("");
   const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(() => {
     try {
       if (typeof window === "undefined") return COLUMNS;
-      const raw = window.localStorage.getItem("expense_details_visible_columns_v1");
+      const raw = window.localStorage.getItem("billable_expense_details_visible_columns_v1");
       const parsed = raw ? JSON.parse(raw) : null;
       if (Array.isArray(parsed) && parsed.every((item) => COLUMNS.includes(item))) {
         return parsed;
@@ -538,7 +537,7 @@ export default function ExpenseDetailsReportPage() {
     } catch {
       // ignore
     }
-    return COLUMNS;
+      return COLUMNS;
   });
 
   const range = useMemo(() => getRange(dateRangeKey, customDateRange), [customDateRange, dateRangeKey]);
@@ -570,7 +569,7 @@ export default function ExpenseDetailsReportPage() {
   }, [isDateRangeOpen, cancelDateRangeSelection]);
 
   const query = useQuery({
-    queryKey: ["reports", "expense-details", refreshTick],
+    queryKey: ["reports", "billable-expense-details", refreshTick],
     staleTime: 30_000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
@@ -581,18 +580,23 @@ export default function ExpenseDetailsReportPage() {
           const dateValue = parseDate(expense.date || expense.expense_date || expense.createdAt || expense.created_at);
           const amount = toNumber(expense.sub_total ?? expense.subTotal ?? expense.amount ?? expense.total ?? 0);
           const taxAmount = toNumber(expense.tax_amount ?? expense.taxAmount ?? expense.total_tax ?? expense.tax ?? 0);
-          const amountWithTax = toNumber(expense.total ?? expense.amount_with_tax ?? expense.amountWithTax ?? amount + taxAmount);
+          const markupPercent = toNumber(expense.markup ?? expense.markup_percent ?? expense.markupPercent ?? expense.markup_rate ?? 0);
+          const invoiceItemAmount = toNumber(expense.invoice_item_amount ?? expense.invoiceItemAmount ?? expense.invoiced_amount ?? expense.amount_with_tax ?? expense.amountWithTax ?? amount + taxAmount);
+          const markedUpAmount = toNumber(expense.marked_up_amount ?? expense.markedUpAmount ?? expense.markup_amount ?? amount * (1 + markupPercent / 100));
+          const grossProfit = toNumber(expense.gross_profit ?? expense.grossProfit ?? markedUpAmount - amount);
 
           return {
             id: String(expense._id || expense.id || expense.expense_id || `${expense.reference_number || ""}-${expense.date || ""}`),
-            status: toText(expense.status || expense.expense_status || expense.state || "—").toUpperCase() || "—",
             dateValue,
             dateLabel: dateValue ? fmtDate(dateValue) : "—",
-            reference: toText(expense.reference_number || expense.reference || expense.reference_no || expense.ref_no || "—") || "—",
-            category: toText(expense.category_name || expense.categoryName || expense.account_name || expense.expenseAccount || expense.expense_account_name || expense.category || "—") || "—",
-            customerName: toText(expense.customer_name || expense.customerName || expense.customer?.name || expense.customer?.displayName || "—") || "—",
-            amount,
-            amountWithTax,
+            transactionNumber: toText(expense.reference_number || expense.reference || expense.reference_no || expense.ref_no || expense.transaction_number || expense.transactionNumber || "—") || "—",
+            vendorName: toText(expense.vendor_name || expense.vendorName || expense.vendor?.name || expense.vendor?.displayName || expense.supplier_name || expense.customer_name || expense.customerName || "—") || "—",
+            itemName: toText(expense.item_name || expense.itemName || expense.description || expense.memo || expense.name || expense.account_name || expense.category_name || "—") || "—",
+            itemAmount: amount,
+            markupPercent,
+            invoiceItemAmount,
+            markedUpAmount,
+            grossProfit,
             currency: normalizeCurrency(expense.currency_code || expense.currencyCode || expense.currency || "SOS"),
           };
         }),
@@ -604,32 +608,19 @@ export default function ExpenseDetailsReportPage() {
     const rows = query.data?.rows || [];
     return rows
       .filter((row) => row.dateValue && inRange(row.dateValue, range))
-      .filter((row) => (statusFilter === "All" ? true : row.status.toLowerCase().includes(statusFilter.toLowerCase())))
-      .filter((row) => (customerFilter.trim() ? row.customerName.toLowerCase().includes(customerFilter.trim().toLowerCase()) : true))
-      .filter((row) => (categoryFilter.trim() ? row.category.toLowerCase().includes(categoryFilter.trim().toLowerCase()) : true))
-      .filter((row) => (referenceFilter.trim() ? row.reference.toLowerCase().includes(referenceFilter.trim().toLowerCase()) : true))
+      .filter((row) => (vendorFilter.trim() ? row.vendorName.toLowerCase().includes(vendorFilter.trim().toLowerCase()) : true))
+      .filter((row) => (itemFilter.trim() ? row.itemName.toLowerCase().includes(itemFilter.trim().toLowerCase()) : true))
       .sort((a, b) => (b.dateValue?.getTime() || 0) - (a.dateValue?.getTime() || 0));
-  }, [categoryFilter, customerFilter, query.data?.rows, range, referenceFilter, statusFilter]);
+  }, [itemFilter, query.data?.rows, range, vendorFilter]);
 
-  const groupedRows = useMemo(() => {
-    if (groupBy === "none") return [{ label: "All Expenses", rows: filteredRows }];
-    const map = new Map<string, ExpenseRow[]>();
-    filteredRows.forEach((row) => {
-      const key =
-        groupBy === "status" ? row.status :
-        groupBy === "category" ? row.category :
-        row.customerName;
-      const next = map.get(key || "Unassigned") || [];
-      next.push(row);
-      map.set(key || "Unassigned", next);
-    });
-    return Array.from(map.entries()).sort(([left], [right]) => left.localeCompare(right)).map(([label, rows]) => ({ label, rows }));
-  }, [filteredRows, groupBy]);
-
+  const groupedRows = useMemo(
+    () => [{ label: "All Billable Expenses", rows: filteredRows }],
+    [filteredRows],
+  );
   useEffect(() => {
     try {
       if (typeof window === "undefined") return;
-      window.localStorage.setItem("expense_details_visible_columns_v1", JSON.stringify(visibleColumns));
+      window.localStorage.setItem("billable_expense_details_visible_columns_v1", JSON.stringify(visibleColumns));
     } catch {
       // ignore
     }
@@ -1101,40 +1092,18 @@ export default function ExpenseDetailsReportPage() {
           <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[360px] rounded-lg border border-[#d7dce7] bg-white p-4 shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
             <div className="grid gap-3">
               <label className="block">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">Status</div>
-                <select
-                  value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value)}
-                  className="h-9 w-full rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#1b6f7b]"
-                >
-                  {["All", "Draft", "Pending", "Approved", "Paid", "Voided"].map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">Customer Name</div>
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">Vendor Name</div>
                 <input
-                  value={customerFilter}
-                  onChange={(event) => setCustomerFilter(event.target.value)}
+                  value={vendorFilter}
+                  onChange={(event) => setVendorFilter(event.target.value)}
                   className="h-9 w-full rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#1b6f7b]"
                 />
               </label>
               <label className="block">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">Category</div>
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">Item Name</div>
                 <input
-                  value={categoryFilter}
-                  onChange={(event) => setCategoryFilter(event.target.value)}
-                  className="h-9 w-full rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#1b6f7b]"
-                />
-              </label>
-              <label className="block">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">Reference#</div>
-                <input
-                  value={referenceFilter}
-                  onChange={(event) => setReferenceFilter(event.target.value)}
+                  value={itemFilter}
+                  onChange={(event) => setItemFilter(event.target.value)}
                   className="h-9 w-full rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#1b6f7b]"
                 />
               </label>
@@ -1142,10 +1111,8 @@ export default function ExpenseDetailsReportPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setStatusFilter("All");
-                    setCustomerFilter("");
-                    setCategoryFilter("");
-                    setReferenceFilter("");
+                    setVendorFilter("");
+                    setItemFilter("");
                   }}
                   className="text-sm font-medium text-[#1b6f7b] hover:underline"
                 >
@@ -1225,7 +1192,13 @@ export default function ExpenseDetailsReportPage() {
                   <th
                     key={column}
                     className={`px-4 py-3 font-semibold ${
-                      column === "Amount" || column === "Amount With Tax" ? "text-right" : "text-left"
+                      column === "Item Amount (BCY)" ||
+                      column === "Markup (%)" ||
+                      column === "Invoice Item Amount (BCY)" ||
+                      column === "Marked Up Amount" ||
+                      column === "Gross Profit"
+                        ? "text-right"
+                        : "text-left"
                     }`}
                   >
                     {column}
@@ -1249,7 +1222,7 @@ export default function ExpenseDetailsReportPage() {
               ) : filteredRows.length === 0 ? (
                 <tr className="border-b border-[#eef2f7]">
                   <td className="px-4 py-8 text-center text-sm text-[#64748b]" colSpan={visibleColumns.length}>
-                    There are no transactions during the selected date range.
+                    No data to display
                   </td>
                 </tr>
               ) : (
@@ -1269,22 +1242,32 @@ export default function ExpenseDetailsReportPage() {
                           <td
                             key={`${row.id}-${column}`}
                             className={`px-4 py-3 text-sm text-[#334155] ${
-                              column === "Amount" || column === "Amount With Tax" ? "text-right" : "text-left"
+                              column === "Item Amount (BCY)" ||
+                              column === "Markup (%)" ||
+                              column === "Invoice Item Amount (BCY)" ||
+                              column === "Marked Up Amount" ||
+                              column === "Gross Profit"
+                                ? "text-right"
+                                : "text-left"
                             }`}
                           >
-                            {column === "Status"
-                              ? row.status
-                              : column === "Date"
+                            {column === "Date"
                                 ? row.dateLabel
-                                : column === "Reference#"
-                                  ? row.reference
-                                  : column === "Category"
-                                    ? row.category
-                                    : column === "Customer Name"
-                                      ? row.customerName
-                                      : column === "Amount"
-                                        ? formatMoney(row.amount, row.currency)
-                                        : formatMoney(row.amountWithTax, row.currency)}
+                                : column === "Transaction#"
+                                  ? row.transactionNumber
+                                  : column === "Vendor Name"
+                                    ? row.vendorName
+                                    : column === "Item Name"
+                                      ? row.itemName
+                                      : column === "Item Amount (BCY)"
+                                        ? formatMoney(row.itemAmount, row.currency)
+                                        : column === "Markup (%)"
+                                          ? `${Number(row.markupPercent || 0).toFixed(2)}%`
+                                          : column === "Invoice Item Amount (BCY)"
+                                            ? formatMoney(row.invoiceItemAmount, row.currency)
+                                            : column === "Marked Up Amount"
+                                              ? formatMoney(row.markedUpAmount, row.currency)
+                                              : formatMoney(row.grossProfit, row.currency)}
                           </td>
                         ))}
                       </tr>

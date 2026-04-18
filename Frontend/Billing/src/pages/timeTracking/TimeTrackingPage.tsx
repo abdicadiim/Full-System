@@ -2983,7 +2983,7 @@ function TimesheetTable() {
       )}
 
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+        <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16 backdrop-blur-none">
           <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
             <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
               <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">

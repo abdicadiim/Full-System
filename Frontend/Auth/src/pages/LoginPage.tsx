@@ -235,11 +235,7 @@ export default function LoginPage() {
           failure?.code === 401 ||
           /incorrect password/i.test(failureMessage) ||
           /invalid username or password/i.test(failureMessage) ||
-          /invalid credentials/i.test(failureMessage) ||
-          (!failure?.code &&
-            !/email address not found/i.test(failureMessage) &&
-            !/verify your email/i.test(failureMessage) &&
-            !/inactive/i.test(failureMessage));
+          /invalid credentials/i.test(failureMessage);
 
         if (badCredentials) {
           setPasswordInvalid(true);
@@ -247,7 +243,12 @@ export default function LoginPage() {
           passwordInputRef.current?.reportValidity();
           setError(passwordMismatchMessage);
         } else {
-          setError(failure?.message || "Login failed");
+          const nextMessage =
+            failureMessage ||
+            (failure?.code === 404
+              ? emailMissingMessage
+              : "Login failed. Please try again or contact support.");
+          setError(nextMessage);
         }
       } else {
         persistSession(result);
