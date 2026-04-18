@@ -27,6 +27,7 @@ import { getQuoteById, updateQuote, Quote, ContactPerson, AttachedFile } from ".
 import { emailTemplatesAPI, quotesAPI, contactPersonsAPI, senderEmailsAPI, customersAPI } from "../../../services/api";
 import { API_BASE_URL, getToken } from "../../../services/auth";
 import { applyEmailTemplate } from "../../settings/emailTemplateUtils";
+import { getQuoteTotalsMeta } from "../QuoteDetail/QuoteDetail.utils";
 
 
 export default function SendQuoteEmail() {
@@ -78,6 +79,100 @@ export default function SendQuoteEmail() {
   const prefilledRecipientFromState = String(
     (location.state as any)?.customerEmail || (location.state as any)?.sendTo || ""
   ).trim();
+
+  const normalizeEmail = (value: unknown) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return "";
+    const angle = raw.match(/<([^>]+)>/);
+    const candidate = angle?.[1] ? angle[1] : raw;
+    const first = candidate.split(/[;,]/)[0]?.trim() || "";
+    const match = first.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+    return String(match?.[0] || first).trim();
+  };
+
+  const resolveQuoteId = (value: any) =>
+    String(value?.id || value?._id || value?.quoteNumber || value?.quoteNo || value?.quote_number || quoteId || "").trim();
+
+  const resolveQuoteNumber = (value: any) =>
+    String(
+      value?.quoteNumber ||
+        value?.quoteNo ||
+        value?.quote_number ||
+        value?.number ||
+        value?.referenceNumber ||
+        value?.reference_number ||
+        value?.id ||
+        value?._id ||
+        quoteId ||
+        ""
+    ).trim();
+
+  const resolveQuoteCustomerName = (value: any) =>
+    String(
+      value?.customerName ||
+        value?.customer?.displayName ||
+        value?.customer?.name ||
+        value?.customer?.companyName ||
+        ((value?.customer?.firstName || value?.customer?.lastName)
+          ? `${value?.customer?.firstName || ""} ${value?.customer?.lastName || ""}`.trim()
+          : "")
+    ).trim() || "Customer";
+
+  const resolveQuoteCustomerEmail = (value: any) =>
+    normalizeEmail(
+      value?.customerEmail ||
+        value?.email ||
+        value?.customer?.email ||
+        value?.customer?.primaryEmail ||
+        value?.customer?.workEmail ||
+        value?.customer?.workPhone ||
+        ""
+    );
+
+  const resolveQuoteDate = (value: any) =>
+    value?.quoteDate || value?.date || value?.createdAt || value?.updatedAt || "";
+
+  const resolveQuoteCurrency = (value: any) =>
+    String(value?.currency || value?.quoteCurrency || value?.baseCurrency || "USD").trim() || "USD";
+
+  const resolveQuoteTotal = (value: any) => {
+    const totals = getQuoteTotalsMeta(value || {});
+    const rawTotal =
+      totals.total ||
+      value?.total ||
+      value?.amount ||
+      value?.grandTotal ||
+      value?.netTotal ||
+      value?.balance ||
+      0;
+    return Number(rawTotal) || 0;
+  };
+
+  const getNormalizedQuote = (value: any) => {
+    const source = value || {};
+    const quoteNumber = resolveQuoteNumber(value);
+    const quoteTotal = resolveQuoteTotal(value);
+    const quoteCurrency = resolveQuoteCurrency(value);
+    const quoteDate = resolveQuoteDate(value);
+    const customerName = resolveQuoteCustomerName(value);
+    const customerEmail = resolveQuoteCustomerEmail(value);
+    const items = Array.isArray(source?.items) ? source.items : [];
+    return {
+      ...source,
+      id: resolveQuoteId(value),
+      quoteNumber,
+      customerName,
+      customerEmail,
+      quoteDate,
+      date: value?.date || quoteDate,
+      currency: quoteCurrency,
+      total: quoteTotal,
+      amount: Number(value?.amount || quoteTotal) || quoteTotal,
+      subTotal: Number(value?.subTotal || value?.subtotal || getQuoteTotalsMeta(value || {}).subTotal || 0) || 0,
+      subtotal: Number(value?.subtotal || value?.subTotal || getQuoteTotalsMeta(value || {}).subTotal || 0) || 0,
+      items,
+    };
+  };
 
   const safeParseJson = (value: string | null) => {
     if (!value) return null;
@@ -151,14 +246,16 @@ export default function SendQuoteEmail() {
         const shouldUsePreloadedQuote =
           Boolean(preloadedQuoteFromState) && preloadedQuoteId === String(quoteId);
 
-        const quoteData = shouldUsePreloadedQuote
+        const rawQuoteData = shouldUsePreloadedQuote
           ? preloadedQuoteFromState!
           : await getQuoteById(quoteId);
 
-        if (!quoteData) {
+        if (!rawQuoteData) {
           navigate("/sales/quotes");
           return;
         }
+
+        const quoteData = getNormalizedQuote(rawQuoteData);
 
         if (!isMounted) return;
         setQuote(quoteData);
@@ -196,23 +293,23 @@ export default function SendQuoteEmail() {
           resolvedSenderName = "Team";
         }
 
-        const quoteAmount = Number(quoteData.total || 0);
-        const currency = quoteData.currency || "USD";
+        const quoteAmount = resolveQuoteTotal(quoteData);
+        const currency = resolveQuoteCurrency(quoteData);
         const formattedAmount = new Intl.NumberFormat("en-US", { style: "currency", currency }).format(quoteAmount);
-        const dateToFormat = quoteData.date || quoteData.quoteDate;
+        const dateToFormat = resolveQuoteDate(quoteData);
         const quoteDate = dateToFormat
           ? new Date(dateToFormat).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
           : "N/A";
 
         setSenderName(resolvedSenderName);
         const companyName = organizationProfile.name || "Taban Enterprise";
-        let templateSubject = `Quote from ${resolvedSenderName || "our team"} (Quote #: ${quoteData.quoteNumber})`;
-        const quotePublicId = quoteData.id || (quoteData as any)._id || quoteId;
+        let templateSubject = `Quote from ${resolvedSenderName || "our team"} (Quote #: ${resolveQuoteNumber(quoteData)})`;
+        const quotePublicId = resolveQuoteId(quoteData) || quoteId;
 
         const emailBody = `
 <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
   <div style="background-color: #3b82f6; color: white; padding: 20px; text-align: center; border-radius: 4px 4px 0 0;">
-    <h1 style="margin: 0; font-size: 36px; font-weight: 400;">Quote #${quoteData.quoteNumber}</h1>
+    <h1 style="margin: 0; font-size: 36px; font-weight: 400;">Quote #${resolveQuoteNumber(quoteData)}</h1>
   </div>
 
   <div style="padding: 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 4px 4px;">
@@ -227,7 +324,7 @@ export default function SendQuoteEmail() {
       <div style="text-align: left; max-width: 240px; margin: 0 auto; border-top: 1px solid #e5e7eb; padding-top: 10px;">
         <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
           <span style="font-size: 12px; color: #6b7280;">Quote No</span>
-          <span style="font-size: 12px; font-weight: bold;">${quoteData.quoteNumber}</span>
+          <span style="font-size: 12px; font-weight: bold;">${resolveQuoteNumber(quoteData)}</span>
         </div>
         <div style="display: flex; justify-content: space-between;">
           <span style="font-size: 12px; color: #6b7280;">Quote Date</span>
@@ -256,8 +353,8 @@ export default function SendQuoteEmail() {
           if (template) {
             templateSubject = applyEmailTemplate(template.subject || templateSubject, {
               CompanyName: companyName,
-              QuoteNumber: quoteData.quoteNumber,
-              CustomerName: quoteData.customerName || "Customer",
+              QuoteNumber: resolveQuoteNumber(quoteData),
+              CustomerName: resolveQuoteCustomerName(quoteData),
               SenderName: resolvedSenderName || "Team",
               Amount: formattedAmount,
               QuoteDate: quoteDate,
@@ -266,8 +363,8 @@ export default function SendQuoteEmail() {
             if (templateBodySource && containsHtmlMarkup(templateBodySource)) {
               resolvedBody = applyEmailTemplate(templateBodySource, {
                 CompanyName: companyName,
-                QuoteNumber: quoteData.quoteNumber,
-                CustomerName: quoteData.customerName || "Customer",
+                QuoteNumber: resolveQuoteNumber(quoteData),
+                CustomerName: resolveQuoteCustomerName(quoteData),
                 SenderName: resolvedSenderName || "Team",
                 Amount: formattedAmount,
                 QuoteDate: quoteDate,
@@ -279,17 +376,14 @@ export default function SendQuoteEmail() {
         }
 
         let resolvedRecipient =
-          prefilledRecipientFromState ||
-          quoteData.customer?.email ||
-          quoteData.customer?.primaryEmail ||
-          quoteData.customerEmail ||
-          "";
+          normalizeEmail(prefilledRecipientFromState) ||
+          resolveQuoteCustomerEmail(quoteData);
 
         if (!resolvedRecipient && customerId) {
           try {
             const customerRes: any = await customersAPI.getById(String(customerId));
             const customerRow: any = customerRes?.data?.customer || customerRes?.data || customerRes;
-            resolvedRecipient = String(customerRow?.email || customerRow?.primaryEmail || "").trim();
+            resolvedRecipient = normalizeEmail(customerRow?.email || customerRow?.primaryEmail || "");
           } catch (customerError) {
             console.error("Error loading customer for quote email:", customerError);
           }
@@ -421,6 +515,12 @@ export default function SendQuoteEmail() {
   const generateQuoteDetailHtml = (quoteData: Quote) => {
     if (!quoteData) return "";
     const quoteAny = quoteData as any;
+    const quoteNumber = resolveQuoteNumber(quoteData);
+    const quoteTotal = resolveQuoteTotal(quoteData);
+    const quoteCurrency = resolveQuoteCurrency(quoteData);
+    const customerName = resolveQuoteCustomerName(quoteData);
+    const quoteDateValue = resolveQuoteDate(quoteData);
+    const quoteDate = quoteDateValue || new Date().toISOString();
 
     const itemsHtml = quoteData.items && quoteData.items.length > 0 ? quoteData.items.map((item: any, index: number) => {
       const itemQty = parseFloat(String(item.quantity || 0)).toFixed(2);
@@ -437,7 +537,6 @@ export default function SendQuoteEmail() {
       `;
     }).join("") : '<tr><td colspan="5" style="padding: 24px; text-align: center; color: #666; font-size: 14px;">No items added</td></tr>';
 
-    const quoteDate = quoteData.quoteDate || quoteData.date || new Date().toISOString();
     const formattedDate = (() => {
       const date = new Date(quoteDate);
       const day = String(date.getDate()).padStart(2, "0");
@@ -452,8 +551,8 @@ export default function SendQuoteEmail() {
       }
       return q.customer || "N/A";
     };
-    const customerName = getCustomerName(quoteData);
-    const total = formatCurrency(quoteData.total || quoteData.amount || 0, quoteData.currency || "KES");
+    const resolvedCustomerName = getCustomerName(quoteData) || customerName;
+    const total = formatCurrency(quoteTotal, quoteCurrency || "KES");
     const notes = quoteData.customerNotes || "Looking forward for your business.";
     const profile = getOrganizationProfileForPdf();
     const organizationName = quoteAny.organizationName || quoteAny.companyName || quoteAny.businessName || profile.name || "Your Company";
@@ -484,14 +583,14 @@ export default function SendQuoteEmail() {
           </div>
           <div style="text-align:right; min-width:210px;">
             <div style="font-size:52px; font-weight:800; letter-spacing:0.5px; line-height:1;">QUOTE</div>
-            <div style="font-size:22px; color:#111; font-weight:700; margin-top:8px;">#${quoteData.quoteNumber || quoteData.id}</div>
+            <div style="font-size:22px; color:#111; font-weight:700; margin-top:8px;">#${quoteNumber}</div>
             <div style="font-size:14px; color:#475569; margin-top:38px;">${formattedDate}</div>
           </div>
         </div>
 
         <div style="margin-bottom:26px;">
           <div style="font-size:14px; font-weight:700; color:#111; margin-bottom:6px;">Bill To</div>
-          <div style="font-size:28px; color:#2563eb; font-weight:600;">${customerName}</div>
+          <div style="font-size:28px; color:#2563eb; font-weight:600;">${resolvedCustomerName}</div>
         </div>
 
         <table style="width:100%; border-collapse:collapse; margin-bottom:30px;">
@@ -512,18 +611,18 @@ export default function SendQuoteEmail() {
         <div style="width:320px; margin-left:auto; margin-bottom:34px;">
           <div style="display:flex; justify-content:space-between; padding:8px 0; font-size:14px; color:#475569;">
             <span>Sub Total</span>
-            <span style="font-weight:600; color:#111;">${formatCurrency(subTotal, quoteData.currency)}</span>
+            <span style="font-weight:600; color:#111;">${formatCurrency(subTotal, quoteCurrency)}</span>
           </div>
           ${quoteData.discount > 0 ? `
           <div style="display:flex; justify-content:space-between; padding:8px 0; font-size:14px; color:#475569;">
             <span>Discount</span>
-            <span style="font-weight:600; color:#111;">-${formatCurrency(quoteData.discount || 0, quoteData.currency)}</span>
+            <span style="font-weight:600; color:#111;">-${formatCurrency(quoteData.discount || 0, quoteCurrency)}</span>
           </div>
           ` : ""}
           ${(typeof quoteData.taxAmount !== 'undefined' && quoteData.taxAmount > 0) ? `
           <div style="display:flex; justify-content:space-between; padding:8px 0; font-size:14px; color:#475569;">
             <span>${quoteData.taxName || "Tax"}</span>
-            <span style="font-weight:600; color:#111;">${formatCurrency(quoteData.taxAmount || 0, quoteData.currency)}</span>
+            <span style="font-weight:600; color:#111;">${formatCurrency(quoteData.taxAmount || 0, quoteCurrency)}</span>
           </div>
           ` : ""}
           <div style="display:flex; justify-content:space-between; padding:12px 0; border-top:2px solid #111; margin-top:8px; font-size:26px; font-weight:700; color:#111;">
@@ -601,7 +700,8 @@ export default function SendQuoteEmail() {
   };
 
   const handleSend = async () => {
-    if (!emailData.sendTo) {
+    const recipientEmail = normalizeEmail(emailData.sendTo);
+    if (!recipientEmail) {
       toast.error("Please enter a recipient email address");
       return;
     }
@@ -645,7 +745,7 @@ export default function SendQuoteEmail() {
       // Send email via API
       setSendingStage("Sending email...");
       await quotesAPI.sendEmail(quoteId, {
-        to: emailData.sendTo,
+        to: recipientEmail,
         from: emailData.from,
         cc: emailData.cc,
         bcc: emailData.bcc,

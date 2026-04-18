@@ -125,18 +125,7 @@ function ItemsPageContent() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const ITEMS_STORAGE_KEY = "inv_items_v1";
   const ITEMS_SELECTED_KEY = "inv_items_selected_id_v1";
-  const readStoredItems = (): Item[] => {
-    try {
-      const raw = localStorage.getItem(ITEMS_STORAGE_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  };
   const readStoredSelectedId = (): string | null => {
     try {
       const raw = localStorage.getItem(ITEMS_SELECTED_KEY);
@@ -154,8 +143,8 @@ function ItemsPageContent() {
   const initialSelectedId =
     initialView === "detail" || initialView === "edit" ? readStoredSelectedId() : null;
 
-  const [items, setItems] = useState<Item[]>(() => readStoredItems());
-  const [loading, setLoading] = useState<boolean>(() => readStoredItems().length === 0);
+  const [items, setItems] = useState<Item[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [view, setView] = useState<string>(initialView); // list | new | detail | edit
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
   const [detailSnapshot, setDetailSnapshot] = useState<Item | null>(null);
@@ -200,7 +189,6 @@ function ItemsPageContent() {
     queryKey: ["items", "list"],
     placeholderData: keepPreviousData,
     staleTime: 2 * 60 * 1000,
-    initialData: readStoredItems().length > 0 ? readStoredItems().map((item) => normalizeItemForList(item)) : undefined,
     queryFn: async () => {
       if ((import.meta as any).env?.DEV) {
         await waitForBackendReady();
@@ -276,7 +264,7 @@ function ItemsPageContent() {
     try {
       const response = await itemsAPI.create(data);
       if (response && "success" in response && response.success === false) {
-        throw new Error((response as any).message || "Failed to save item locally");
+        throw new Error((response as any).message || "Failed to save item");
       }
 
       const newItem = response.data || response;
@@ -291,17 +279,6 @@ function ItemsPageContent() {
       const normalizedId = String(normalizedItem.id || normalizedItem._id || "");
       if (!normalizedId) {
         throw new Error("Item saved without id");
-      }
-
-      // Ensure localStorage has the new item (hard guarantee for offline/local flow).
-      try {
-        const raw = localStorage.getItem(ITEMS_STORAGE_KEY);
-        const existing = raw ? JSON.parse(raw) : [];
-        const rows = Array.isArray(existing) ? existing : [];
-        const withoutCurrent = rows.filter((row: any) => String(row?.id || row?._id) !== normalizedId);
-        localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify([normalizedItem, ...withoutCurrent]));
-      } catch (storageError) {
-        console.error("Local storage sync failed:", storageError);
       }
 
       // Immediately reflect in UI list before refresh.
@@ -350,6 +327,7 @@ function ItemsPageContent() {
     if (!selectedId) return;
     const targetId = String(selectedId);
     const prevItems = items;
+    let toastId: any = null;
     const optimisticUpdate = (list: Item[]) =>
       list.map((row: any) =>
         String(row?.id || row?._id) === targetId ? { ...row, ...data } : row
@@ -358,17 +336,8 @@ function ItemsPageContent() {
       // Optimistic update so the UI (including Mark as Active/Inactive label) updates immediately.
       setItems((prev) => optimisticUpdate(prev));
       setDetailSnapshot((prev) => (prev && (String(prev.id || (prev as any)._id) === targetId) ? { ...prev, ...data } : prev));
-      try {
-        const raw = localStorage.getItem(ITEMS_STORAGE_KEY);
-        const existing = raw ? JSON.parse(raw) : [];
-        const rows = Array.isArray(existing) ? existing : [];
-        const nextRows = optimisticUpdate(rows as Item[]);
-        localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify(nextRows));
-      } catch {
-        // ignore storage errors
-      }
 
-      const toastId = toast.success("Item updated successfully");
+      toastId = toast.success("Item updated successfully");
 
       await itemsAPI.update(selectedId, data);
       await fetchItems();
@@ -382,16 +351,13 @@ function ItemsPageContent() {
         const restore = prevItems.find((row: any) => String(row?.id || row?._id) === targetId);
         return restore ? (restore as Item) : prev;
       });
-      try {
-        localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify(prevItems));
-      } catch {
-        // ignore storage errors
+      if (toastId) {
+        toast.update(toastId, {
+          render: "Failed to update item: " + (error.message || "Unknown error"),
+          type: "error",
+          autoClose: 3000,
+        });
       }
-      toast.update(toastId, {
-        render: "Failed to update item: " + (error.message || "Unknown error"),
-        type: "error",
-        autoClose: 3000,
-      });
     }
   };
 
@@ -415,15 +381,6 @@ function ItemsPageContent() {
     try {
       // Optimistic UI update
       setItems((prev) => prev.filter((row: any) => String(row?.id || row?._id) !== String(deleteId)));
-      try {
-        const raw = localStorage.getItem(ITEMS_STORAGE_KEY);
-        const existing = raw ? JSON.parse(raw) : [];
-        const rows = Array.isArray(existing) ? existing : [];
-        const nextRows = rows.filter((row: any) => String(row?.id || row?._id) !== String(deleteId));
-        localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify(nextRows));
-      } catch {
-        // ignore storage errors
-      }
 
       if (selectedId === deleteId) {
         rememberSelectedId(null);
@@ -438,11 +395,6 @@ function ItemsPageContent() {
     } catch (error: any) {
       // Restore on failure
       setItems(prevItems);
-      try {
-        localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify(prevItems));
-      } catch {
-        // ignore storage errors
-      }
       toast.error("Failed to delete item");
     }
   };
@@ -458,15 +410,6 @@ function ItemsPageContent() {
     try {
       // Optimistic UI update
       setItems((prev) => prev.filter((row: any) => !idsToDelete.includes(String(row?.id || row?._id))));
-      try {
-        const raw = localStorage.getItem(ITEMS_STORAGE_KEY);
-        const existing = raw ? JSON.parse(raw) : [];
-        const rows = Array.isArray(existing) ? existing : [];
-        const nextRows = rows.filter((row: any) => !idsToDelete.includes(String(row?.id || row?._id)));
-        localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify(nextRows));
-      } catch {
-        // ignore storage errors
-      }
 
       if (selectedId && idsToDelete.includes(String(selectedId))) {
         rememberSelectedId(null);
@@ -480,11 +423,6 @@ function ItemsPageContent() {
       void fetchItems();
     } catch (error: any) {
       setItems(prevItems);
-      try {
-        localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify(prevItems));
-      } catch {
-        // ignore storage errors
-      }
       toast.error("Bulk delete failed");
     }
   };
@@ -614,22 +552,13 @@ function ItemsPageContent() {
       _id: optimisticId,
     } as Item);
 
-    // Optimistically update list and local storage for instant feedback.
+    // Optimistically update the UI list for instant feedback.
     setItems((prev) => {
       const withoutCurrent = prev.filter(
         (row: any) => String(row?.id || row?._id) !== optimisticId
       );
       return [optimisticItem, ...withoutCurrent];
     });
-    try {
-      const raw = localStorage.getItem(ITEMS_STORAGE_KEY);
-      const existing = raw ? JSON.parse(raw) : [];
-      const rows = Array.isArray(existing) ? existing : [];
-      const withoutCurrent = rows.filter((row: any) => String(row?.id || row?._id) !== optimisticId);
-      localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify([optimisticItem, ...withoutCurrent]));
-    } catch {
-      // ignore storage errors
-    }
 
     const toastId = toast.success("Item cloned successfully");
 
@@ -655,18 +584,6 @@ function ItemsPageContent() {
         )
       );
 
-      try {
-        const raw = localStorage.getItem(ITEMS_STORAGE_KEY);
-        const existing = raw ? JSON.parse(raw) : [];
-        const rows = Array.isArray(existing) ? existing : [];
-        const nextRows = rows.map((row: any) =>
-          String(row?.id || row?._id) === optimisticId ? normalizedItem : row
-        );
-        localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify(nextRows));
-      } catch {
-        // ignore storage errors
-      }
-
       if (selectedId === optimisticId && normalizedId) {
         rememberSelectedId(normalizedId);
       }
@@ -675,15 +592,6 @@ function ItemsPageContent() {
     } catch (error: any) {
       console.error("Failed to clone item:", error);
       setItems((prev) => prev.filter((row: any) => String(row?.id || row?._id) !== optimisticId));
-      try {
-        const raw = localStorage.getItem(ITEMS_STORAGE_KEY);
-        const existing = raw ? JSON.parse(raw) : [];
-        const rows = Array.isArray(existing) ? existing : [];
-        const nextRows = rows.filter((row: any) => String(row?.id || row?._id) !== optimisticId);
-        localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify(nextRows));
-      } catch {
-        // ignore storage errors
-      }
       toast.update(toastId, {
         render: "Failed to clone item",
         type: "error",

@@ -16,6 +16,12 @@ const toModuleKey = (value: string) =>
 
 const toCompactKey = (value: string) => toModuleKey(value).replace(/_/g, "");
 
+const normalizeSeriesModuleKey = (value: string) => {
+  const key = toModuleKey(value);
+  if (key === "salesreciept" || key === "salesreceipt") return "sales_receipt";
+  return key;
+};
+
 const requireOrgId = (req: express.Request, res: express.Response) => {
   const orgId = req.user?.organizationId;
   if (!orgId) {
@@ -53,7 +59,9 @@ const matchesSeriesLookup = (
     return true;
   }
 
-  const targetKey = toCompactKey(lookup.moduleKey || lookup.module || lookup.seriesName || "");
+  const targetKey = toCompactKey(
+    normalizeSeriesModuleKey(lookup.moduleKey || lookup.module || lookup.seriesName || ""),
+  );
   if (!targetKey) return false;
 
   const rowKeys = [
@@ -61,7 +69,7 @@ const matchesSeriesLookup = (
     row?.moduleKey,
     row?.name,
     row?.seriesName,
-  ].map((value) => toCompactKey(String(value || "")));
+  ].map((value) => toCompactKey(normalizeSeriesModuleKey(String(value || ""))));
 
   return rowKeys.some((key) => key === targetKey);
 };
@@ -133,7 +141,7 @@ export const createTransactionNumberSeriesBulk = async (req: express.Request, re
       seriesName,
       module,
       name: module,
-      moduleKey: toModuleKey(module),
+      moduleKey: normalizeSeriesModuleKey(module),
       prefix,
       startingNumber,
       nextNumber,

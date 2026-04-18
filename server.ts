@@ -64,6 +64,8 @@ if (AUTH_BYPASS) {
 
 const app = express();
 let server: Server | null = null;
+const LISTEN_RETRY_DELAY_MS = 300;
+const LISTEN_RETRY_ATTEMPTS = 20;
 
 const logServerError = (label: string, error: unknown) => {
   if (error instanceof Error) {
@@ -221,15 +223,36 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 
 const start = async () => {
   const dbConnected = await connectDb();
-  server = app.listen(PORT, () => {
-    // eslint-disable-next-line no-console
-    console.log(`API listening on http://localhost:${PORT}`);
-  });
-  server.on("error", (error: NodeJS.ErrnoException) => {
-    // eslint-disable-next-line no-console
-    console.error(`Failed to listen on port ${PORT}:`, error);
-    process.exitCode = 1;
-  });
+
+  const listenOnce = () =>
+    new Promise<Server>((resolve, reject) => {
+      const nextServer = app.listen(PORT, () => resolve(nextServer));
+      nextServer.once("error", (error: NodeJS.ErrnoException) => reject(error));
+    });
+
+  for (let attempt = 1; attempt <= LISTEN_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      server = await listenOnce();
+      // eslint-disable-next-line no-console
+      console.log(`API listening on http://localhost:${PORT}`);
+      break;
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err?.code !== "EADDRINUSE" || attempt === LISTEN_RETRY_ATTEMPTS) {
+        // eslint-disable-next-line no-console
+        console.error(`Failed to listen on port ${PORT}:`, error);
+        process.exitCode = 1;
+        throw error;
+      }
+
+      // eslint-disable-next-line no-console
+      console.warn(
+        `Port ${PORT} is busy. Retrying in ${LISTEN_RETRY_DELAY_MS}ms (${attempt}/${LISTEN_RETRY_ATTEMPTS})...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, LISTEN_RETRY_DELAY_MS));
+    }
+  }
+
   if (!dbConnected && !AUTH_BYPASS) {
     // eslint-disable-next-line no-console
     console.warn("API started without a live MongoDB connection. Auth and database-backed routes will return 500 until DB is available.");

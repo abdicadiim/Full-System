@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
 import { formatSalesReceiptNumber, getSalesReceiptById, getSalesReceipts, deleteSalesReceipt, updateSalesReceipt, saveSalesReceipt, SalesReceipt } from "../../salesModel";
 import { currenciesAPI, salesReceiptsAPI, senderEmailsAPI } from "../../../services/api";
@@ -87,6 +87,8 @@ const getSalesReceiptStatusLabel = (value: any) =>
 export default function SalesReceiptDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const receiptFromState = (location.state as any)?.receiptData || (location.state as any)?.receipt || (location.state as any)?.salesReceipt || null;
   const [receipt, setReceipt] = useState<DetailedSalesReceipt | null>(null);
   const [receipts, setReceipts] = useState<SalesReceipt[]>([]);
   const [baseCurrency, setBaseCurrency] = useState("USD");
@@ -96,7 +98,7 @@ export default function SalesReceiptDetail() {
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   const [filterSearch, setFilterSearch] = useState("");
   const [selectedPeriod, setSelectedPeriod] = useState("All");
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => !Boolean(receiptFromState));
   const [showAttachmentsPopover, setShowAttachmentsPopover] = useState(false);
   const [attachmentMenuIndex, setAttachmentMenuIndex] = useState<number | null>(null);
   const [attachmentDeleteConfirmIndex, setAttachmentDeleteConfirmIndex] = useState<number | null>(null);
@@ -155,7 +157,17 @@ export default function SalesReceiptDetail() {
 
   useEffect(() => {
     const loadReceiptData = async () => {
-      setIsLoading(true);
+      const stateReceiptId = String(receiptFromState?.id || receiptFromState?._id || "").trim();
+      const currentReceiptId = String(id || "").trim();
+      if (receiptFromState && (!stateReceiptId || stateReceiptId === currentReceiptId)) {
+        setReceipt(receiptFromState as DetailedSalesReceipt);
+        setReceiptAttachments(Array.isArray((receiptFromState as any).attachments) ? (receiptFromState as any).attachments : []);
+        setReceiptComments(Array.isArray((receiptFromState as any).comments) ? (receiptFromState as any).comments : []);
+        setIsLoading(false);
+      } else {
+        setIsLoading(true);
+      }
+
       try {
         const receiptData = await getSalesReceiptById(id!);
         console.log("SalesReceiptDetail - ID:", id);
@@ -166,7 +178,9 @@ export default function SalesReceiptDetail() {
           setReceiptComments(Array.isArray((receiptData as any).comments) ? (receiptData as any).comments : []);
         } else {
           console.warn("SalesReceiptDetail - Receipt not found for ID:", id);
-          navigate("/sales/sales-receipts");
+          if (!receiptFromState) {
+            navigate("/sales/sales-receipts");
+          }
           return;
         }
         const allReceipts = await getSalesReceipts();
@@ -209,7 +223,7 @@ export default function SalesReceiptDetail() {
         console.error("Error loading organization address:", e);
       }
     }
-  }, [id, navigate]);
+  }, [id, navigate, receiptFromState]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -310,6 +324,60 @@ export default function SalesReceiptDetail() {
     ).trim()
   };
 
+  const normalizeReceiptItems = (source: any) => {
+    const rawItems =
+      source?.items ||
+      source?.lineItems ||
+      source?.receiptItems ||
+      source?.itemDetails ||
+      [];
+
+    const itemsArray = Array.isArray(rawItems)
+      ? rawItems
+      : rawItems && typeof rawItems === "object"
+        ? [rawItems]
+        : [];
+
+    return itemsArray
+      .map((line: any, index: number) => {
+        const quantity = toFiniteNumber(line?.quantity ?? line?.qty ?? 0, 0);
+        const unitPrice = toFiniteNumber(line?.unitPrice ?? line?.rate ?? line?.price ?? 0, 0);
+        const amount = toFiniteNumber(line?.total ?? line?.amount ?? quantity * unitPrice, 0);
+        const name = String(
+          line?.name ||
+          line?.itemDetails ||
+          line?.description ||
+          line?.itemName ||
+          line?.productName ||
+          line?.label ||
+          "Item"
+        ).trim();
+
+        return {
+          id: String(line?.id || line?._id || line?.itemId || index),
+          name,
+          itemDetails: name,
+          description: String(line?.description || line?.itemDescription || ""),
+          quantity,
+          unitPrice,
+          rate: unitPrice,
+          total: amount,
+          amount,
+          unit: String(line?.unit || line?.uom || ""),
+          cost: toFiniteNumber(line?.cost, 0),
+          discount: toFiniteNumber(line?.discount, 0),
+          discountType: String(line?.discountType || "percent"),
+          tax: line?.tax || "",
+          taxId: line?.taxId || line?.tax_id || "",
+          taxRate: toFiniteNumber(line?.taxRate ?? line?.taxPercent ?? line?.tax_percentage, 0),
+          taxAmount: toFiniteNumber(line?.taxAmount ?? 0, 0),
+        };
+      })
+      .filter((line: any) => line.name || line.description || line.quantity || line.unitPrice || line.amount);
+  };
+
+  const receiptItems = normalizeReceiptItems(receipt);
+
   // Journal entries (should come from accounting system)
   // Based on payment details - deposit to account gets debit, sales account gets credit
   const depositAccount = receipt?.depositTo || "Petty Cash";
@@ -321,8 +389,8 @@ export default function SalesReceiptDetail() {
   ];
 
   // If items have cost, add Cost of Goods Sold entries
-  if (receipt?.items && receipt.items.length > 0) {
-    const totalCost = receipt.items.reduce((sum, item) => {
+  if (receiptItems.length > 0) {
+    const totalCost = receiptItems.reduce((sum, item) => {
       return sum + (parseFloat(item.cost || 0) * parseFloat(item.quantity || 0));
     }, 0);
 
@@ -659,22 +727,20 @@ ${sellerInfo.name}`
       const numberResponse = await salesReceiptsAPI.getNextNumber();
       const nextReceiptNumber = numberResponse?.data?.nextNumber;
 
-      const clonedItems = Array.isArray(receipt.items)
-        ? receipt.items.map((line: any) => ({
-          item: toEntityId(line?.item || line?.itemId) || undefined,
-          name: line?.name || line?.itemDetails || line?.description || "Item",
-          description: String(line?.description || ""),
-          quantity: toFiniteNumber(line?.quantity, 1),
-          unitPrice: toFiniteNumber(line?.unitPrice ?? line?.rate ?? line?.price, 0),
-          discount: toFiniteNumber(line?.discount, 0),
-          discountType: String(line?.discountType || "percent").toLowerCase().includes("amount") ? "amount" : "percent",
-          tax: line?.tax || line?.taxId || line?.tax_id || "",
-          taxId: line?.taxId || line?.tax_id || line?.tax || "",
-          taxRate: toFiniteNumber(line?.taxRate ?? line?.taxPercent ?? line?.tax_percentage, 0),
-          taxAmount: toFiniteNumber(line?.taxAmount ?? line?.tax, 0),
-          total: toFiniteNumber(line?.total ?? line?.amount, 0),
-        }))
-        : [];
+      const clonedItems = receiptItems.map((line: any) => ({
+        item: toEntityId(line?.item || line?.itemId) || undefined,
+        name: line?.name || line?.itemDetails || line?.description || "Item",
+        description: String(line?.description || ""),
+        quantity: toFiniteNumber(line?.quantity, 1),
+        unitPrice: toFiniteNumber(line?.unitPrice ?? line?.rate ?? line?.price, 0),
+        discount: toFiniteNumber(line?.discount, 0),
+        discountType: String(line?.discountType || "percent").toLowerCase().includes("amount") ? "amount" : "percent",
+        tax: line?.tax || line?.taxId || line?.tax_id || "",
+        taxId: line?.taxId || line?.tax_id || line?.tax || "",
+        taxRate: toFiniteNumber(line?.taxRate ?? line?.taxPercent ?? line?.tax_percentage, 0),
+        taxAmount: toFiniteNumber(line?.taxAmount ?? line?.tax, 0),
+        total: toFiniteNumber(line?.total ?? line?.amount, 0),
+      }));
 
       const clonedPayload = {
         receiptNumber: nextReceiptNumber,
@@ -1187,8 +1253,8 @@ ${sellerInfo.name}`
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {receipt.items && receipt.items.length > 0 ? (
-                      receipt.items.map((item, index) => (
+                    {receiptItems.length > 0 ? (
+                      receiptItems.map((item, index) => (
                         <tr key={item.id || index}>
                           <td className="py-4 px-4 text-sm text-gray-600 align-top">{index + 1}</td>
                           <td className="py-4 px-4 align-top">

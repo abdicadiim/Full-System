@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown, Plus, MoreVertical, Search, Filter, ArrowUpDown, Bell, X, Check, Settings, LogOut, User } from "lucide-react";
-
-const ITEMS_KEY = "inv_items_v1";
+import { itemsAPI } from "../../services/api";
 
 interface Item {
   id: string;
@@ -15,9 +14,6 @@ interface Item {
   unit?: string;
 }
 
-
-const hasLS = () => typeof window !== "undefined" && !!window.localStorage;
-const getLS = (k: string) => (hasLS() ? window.localStorage.getItem(k) : null);
 
 export default function AllItemsPage() {
   const navigate = useNavigate();
@@ -37,14 +33,22 @@ export default function AllItemsPage() {
   const notificationDropdownRef = useRef(null);
 
   useEffect(() => {
-    const raw = getLS(ITEMS_KEY);
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw);
-      setItems(Array.isArray(parsed) ? parsed : []);
-    } catch {
-      // ignore
-    }
+    const loadItems = async () => {
+      try {
+        const response = await itemsAPI.getAll();
+        const rows = Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response?.items)
+            ? response.items
+            : [];
+        setItems(rows);
+      } catch (error) {
+        console.error("Failed to load items:", error);
+        setItems([]);
+      }
+    };
+
+    void loadItems();
   }, []);
 
   // Handle click outside for dropdowns

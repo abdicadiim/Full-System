@@ -948,20 +948,17 @@ export default function NewSalesReceipt() {
 
         // Load next sales receipt number
         if (!isEditMode) {
-          const numberSeriesResponse = await transactionNumberSeriesAPI.getAll();
-          if (numberSeriesResponse && numberSeriesResponse.data) {
-            const salesReceiptSeries = numberSeriesResponse.data.find(
-              series => series.module === 'sales_receipt' || (series.name || "").toLowerCase().includes('sales receipt')
-            );
-            if (salesReceiptSeries) {
-              const nextNumber = await transactionNumberSeriesAPI.getNextNumber(salesReceiptSeries.id);
-              if (nextNumber && nextNumber.data) {
-                setFormData(prev => ({
-                  ...prev,
-                  receiptNumber: nextNumber.data.next_number
-                }));
-              }
-            }
+          const nextNumberResponse = await salesReceiptsAPI.getNextNumber();
+          const nextNumber =
+            nextNumberResponse?.data?.nextNumber ||
+            nextNumberResponse?.data?.next_number ||
+            nextNumberResponse?.data?.receiptNumber ||
+            nextNumberResponse?.nextNumber;
+          if (nextNumber) {
+            setFormData(prev => ({
+              ...prev,
+              receiptNumber: String(nextNumber).trim()
+            }));
           }
         }
 
@@ -1522,13 +1519,6 @@ export default function NewSalesReceipt() {
   };
 
   const openReceiptNumberPreferences = async () => {
-    const normalizeKey = (value: any) =>
-      String(value || "")
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "_")
-        .replace(/^_+|_+$/g, "");
-
     const padNextNumber = (row: any) => {
       const starting = String(row?.startingNumber || row?.nextNumber || "00001").trim() || "00001";
       if (/^\d+$/.test(starting)) return starting;
@@ -1542,8 +1532,8 @@ export default function NewSalesReceipt() {
       const response = await transactionNumberSeriesAPI.getAll();
       const rows = Array.isArray(response?.data) ? response.data : [];
       const salesReceiptRows = rows.filter((row: any) => {
-        const key = normalizeKey(row?.moduleKey || row?.module || row?.name || row?.seriesName);
-        return key === "sales_receipt" || key === "salesreceipt" || String(row?.module || "").toLowerCase().includes("sales receipt");
+        const key = normalizeSeriesKey(row?.moduleKey || row?.module || row?.name || row?.seriesName);
+        return key === "sales_receipt" || String(row?.module || "").toLowerCase().includes("sales receipt");
       });
       const preferredRow = salesReceiptRows[0] || null;
       const seriesName = String(preferredRow?.seriesName || "Default Transaction Series").trim() || "Default Transaction Series";
@@ -1606,7 +1596,8 @@ export default function NewSalesReceipt() {
       isDefault: true,
     }]).map((module: any) => {
       const isSalesReceipt = String(module?.module || "").toLowerCase().includes("sales receipt");
-      if (!isSalesReceipt) return module;
+      const isSalesReceiptModule = normalizeSeriesKey(module?.module || module?.moduleKey || module?.name) === "sales_receipt";
+      if (!isSalesReceipt && !isSalesReceiptModule) return module;
       return {
         ...module,
         module: "Sales Receipt",
@@ -2314,24 +2305,81 @@ export default function NewSalesReceipt() {
     return true;
   };
 
+  const normalizeSeriesKey = (value: any) =>
+    String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .replace(/^(salesreciept|salesreceipt)$/, "sales_receipt");
+
+  const findSalesReceiptSeries = (rows: any[]) =>
+    (Array.isArray(rows) ? rows : []).find((series: any) => {
+      const key = normalizeSeriesKey(series?.moduleKey || series?.module || series?.name || series?.seriesName);
+      return key === "sales_receipt";
+    }) || null;
+
   const reserveReceiptNumberForSave = async () => {
     try {
-      const response = await transactionNumberSeriesAPI.getNextNumber({
-        module: "Sales Receipt",
-        locationName: formData.selectedLocation || "Head Office",
-        reserve: true,
-      });
+      const reservedResponse = await salesReceiptsAPI.getNextNumber();
       const nextNumber =
-        response?.data?.nextNumber ||
-        response?.data?.next_number ||
-        response?.data?.receiptNumber ||
-        response?.nextNumber ||
+        reservedResponse?.data?.nextNumber ||
+        reservedResponse?.data?.next_number ||
+        reservedResponse?.data?.receiptNumber ||
+        reservedResponse?.nextNumber ||
         "";
       return String(nextNumber || "").trim();
     } catch (error) {
-      console.error("Error reserving sales receipt number:", error);
       return "";
     }
+  };
+
+  const resolveReceiptIdFromReceiptNumber = async (receiptNumber: string) => {
+    const target = String(receiptNumber || "").trim();
+    if (!target) return "";
+    try {
+      const listResponse: any = await salesReceiptsAPI.getAll({
+        limit: 100000,
+        _cacheBust: Date.now(),
+      });
+      const rows = Array.isArray(listResponse?.data)
+        ? listResponse.data
+        : Array.isArray(listResponse?.data?.data)
+          ? listResponse.data.data
+          : [];
+      const match = [...rows].reverse().find(
+        (row: any) => String(row?.receiptNumber || "").trim() === target,
+      );
+      return String(match?.id || match?._id || "").trim();
+    } catch {
+      return "";
+    }
+  };
+
+  const extractSavedReceiptId = async (savedReceipt: any, fallbackReceiptData: any) => {
+    const directId = String(
+      savedReceipt?.id ||
+      savedReceipt?._id ||
+      savedReceipt?.receiptId ||
+      savedReceipt?.data?.id ||
+      savedReceipt?.data?._id ||
+      savedReceipt?.data?.receiptId ||
+      id ||
+      ""
+    ).trim();
+    if (directId) return directId;
+
+    const receiptNumber = String(
+      savedReceipt?.receiptNumber ||
+      savedReceipt?.data?.receiptNumber ||
+      fallbackReceiptData?.receiptNumber ||
+      ""
+    ).trim();
+    if (receiptNumber) {
+      return await resolveReceiptIdFromReceiptNumber(receiptNumber);
+    }
+
+    return "";
   };
 
   const handleSave = async () => {
@@ -2349,9 +2397,17 @@ export default function NewSalesReceipt() {
       const savedReceipt = isEditMode
         ? await updateSalesReceipt(id, receiptData)
         : await saveSalesReceipt(receiptData);
-      const receiptId = savedReceipt?.id || savedReceipt?._id || id;
+      const receiptId = await extractSavedReceiptId(savedReceipt, receiptData);
       toast.success("Sales receipt saved successfully.");
-      navigate(`/sales/sales-receipts/${receiptId}`);
+      if (receiptId) {
+        navigate(`/sales/sales-receipts/${receiptId}`, {
+          state: { receiptData: savedReceipt },
+        });
+      } else {
+        navigate("/sales/sales-receipts", {
+          state: { receiptData: savedReceipt },
+        });
+      }
     } catch (error) {
       const errorMessage = String((error as any)?.message || (error as any)?.response?.message || "");
       const isDuplicate = /duplicate|already exists|e11000|receiptnumber/i.test(errorMessage);
@@ -2362,16 +2418,22 @@ export default function NewSalesReceipt() {
             const retryPayload = { ...buildReceiptPayload("paid").receiptData, receiptNumber: retryNumber };
             setFormData((prev) => ({ ...prev, receiptNumber: retryNumber }));
             const savedReceipt = await saveSalesReceipt(retryPayload);
-            const receiptId = savedReceipt?.id || savedReceipt?._id || id;
+            const receiptId = await extractSavedReceiptId(savedReceipt, retryPayload);
             toast.success("Sales receipt saved successfully.");
-            navigate(`/sales/sales-receipts/${receiptId}`);
+            if (receiptId) {
+              navigate(`/sales/sales-receipts/${receiptId}`, {
+                state: { receiptData: savedReceipt },
+              });
+            } else {
+              navigate("/sales/sales-receipts", {
+                state: { receiptData: savedReceipt },
+              });
+            }
             return;
           }
         } catch (retryError) {
-          console.error("Retry after duplicate receipt number failed:", retryError);
         }
       }
-      console.error("Error saving sales receipt:", error);
       toast.error(errorMessage || "Failed to save sales receipt. Please try again.");
     } finally {
       setSaveLoading(null);
@@ -2394,7 +2456,7 @@ export default function NewSalesReceipt() {
         ? await updateSalesReceipt(id, receiptData)
         : await saveSalesReceipt(receiptData);
 
-      const receiptId = savedReceipt?.id || savedReceipt?._id || id;
+      const receiptId = await extractSavedReceiptId(savedReceipt, receiptData);
       const receiptNumber = savedReceipt?.receiptNumber || receiptData.receiptNumber;
       const emailReceipt = {
         ...receiptData,
@@ -2404,15 +2466,55 @@ export default function NewSalesReceipt() {
         currency: savedReceipt?.currency || receiptData.currency || baseCurrency || "USD"
       };
 
-      navigate(`/sales/sales-receipts/${receiptId}/send-email`, {
-        state: {
-          receiptData: emailReceipt
-        }
-      });
+      if (receiptId) {
+        navigate(`/sales/sales-receipts/${receiptId}/send-email`, {
+          state: {
+            receiptData: emailReceipt
+          }
+        });
+      } else {
+        navigate("/sales/sales-receipts", {
+          state: { receiptData: emailReceipt }
+        });
+      }
       toast.success("Sales receipt saved and ready to send.");
     } catch (error) {
       const errorMessage = String((error as any)?.message || (error as any)?.response?.message || "");
-      console.error("Error saving/sending sales receipt:", error);
+      const isDuplicate = /duplicate|already exists|e11000|receiptnumber/i.test(errorMessage);
+      if (!isEditMode && isDuplicate) {
+        try {
+          const retryNumber = await reserveReceiptNumberForSave();
+          if (retryNumber) {
+            const retryPayload = { ...buildReceiptPayload("paid").receiptData, receiptNumber: retryNumber };
+            setFormData((prev) => ({ ...prev, receiptNumber: retryNumber }));
+            const savedReceipt = await saveSalesReceipt(retryPayload);
+            const receiptId = await extractSavedReceiptId(savedReceipt, retryPayload);
+            const receiptNumber = savedReceipt?.receiptNumber || retryPayload.receiptNumber;
+            const emailReceipt = {
+              ...retryPayload,
+              ...savedReceipt,
+              receiptNumber,
+              total: Number(savedReceipt?.total ?? retryPayload.total ?? 0),
+              currency: savedReceipt?.currency || retryPayload.currency || baseCurrency || "USD"
+            };
+
+            if (receiptId) {
+              navigate(`/sales/sales-receipts/${receiptId}/send-email`, {
+                state: {
+                  receiptData: emailReceipt
+                }
+              });
+            } else {
+              navigate("/sales/sales-receipts", {
+                state: { receiptData: emailReceipt }
+              });
+            }
+            toast.success("Sales receipt saved and ready to send.");
+            return;
+          }
+        } catch (retryError) {
+        }
+      }
       toast.error(errorMessage || "Failed to save and send sales receipt. Please try again.");
     } finally {
       setSaveLoading(null);

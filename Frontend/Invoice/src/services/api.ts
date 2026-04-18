@@ -573,7 +573,6 @@ const normalizeId = (value: any, prefix = "id") =>
       `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
   );
 
-const ITEMS_STORAGE_KEY = "inv_items_v1";
 const UNITS_STORAGE_KEY = "taban_units_v1";
 const TAG_ASSIGNMENTS_STORAGE_KEY = "taban_item_tag_assignments_v1";
 const LOCAL_QUOTES_KEY = "taban_books_quotes";
@@ -2613,8 +2612,33 @@ export const salesReceiptsAPI = {
   delete: (id: string) => salesReceiptsBase.delete(id),
   getNextNumber: async () => {
     try {
+      const res = await request({ path: "/sales-receipts/next-number", skipCache: true });
+      if (res?.success) {
+        const nextNumber =
+          res?.data?.nextNumber ||
+          res?.data?.next_number ||
+          res?.data?.receiptNumber ||
+          res?.nextNumber ||
+          "";
+        if (nextNumber) {
+          const normalized = String(nextNumber).trim().replace(/[^A-Za-z0-9]/g, "");
+          return {
+            success: true,
+            data: {
+              nextNumber: normalized,
+              next_number: normalized,
+              receiptNumber: normalized,
+              nextReceiptNumber: normalized,
+            },
+          };
+        }
+      }
+    } catch {
+      // fall back
+    }
+    try {
       const txRes: any = await transactionNumberSeriesAPI.getNextNumber({
-        module: "Sales Receipt",
+        moduleKey: "sales_receipt",
         reserve: false,
       });
       const nextNumber =
@@ -2635,12 +2659,6 @@ export const salesReceiptsAPI = {
           },
         };
       }
-    } catch {
-      // fall back
-    }
-    try {
-      const res = await request({ path: "/sales-receipts/next-number" });
-      if (res?.success) return res as any;
     } catch {}
     const all = await salesReceiptsLocal.getAll({ limit: 100000 });
     const next = (all.pagination?.total || 0) + 1;

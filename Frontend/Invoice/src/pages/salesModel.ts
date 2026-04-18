@@ -2145,6 +2145,42 @@ export const getSalesReceiptById = async (receiptId: string): Promise<SalesRecei
 
 export const saveSalesReceipt = async (receiptData: Partial<SalesReceipt>): Promise<SalesReceipt> => {
   try {
+    const normalizeSavedReceipt = async (response: any) => {
+      const payload = response?.data?.data ?? response?.data ?? response?.result ?? response ?? {};
+      let id = String(
+        payload?.id ||
+        payload?._id ||
+        payload?.receiptId ||
+        payload?.salesReceiptId ||
+        payload?.documentId ||
+        payload?.uuid ||
+        ""
+      ).trim();
+      if (!id && payload?.receiptNumber) {
+        try {
+          const listResponse: any = await salesReceiptsAPI.getAll({
+            limit: 100000,
+            _cacheBust: Date.now(),
+          });
+          const rows = Array.isArray(listResponse?.data)
+            ? listResponse.data
+            : Array.isArray(listResponse?.data?.data)
+              ? listResponse.data.data
+              : [];
+          const match = [...rows].reverse().find(
+            (row: any) =>
+              String(row?.receiptNumber || "").trim() === String(payload?.receiptNumber || "").trim(),
+          );
+          id = String(match?.id || match?._id || match?.receiptId || "").trim();
+        } catch {}
+      }
+      return {
+        ...payload,
+        id,
+        _id: id,
+      };
+    };
+
     const toISO = (dateVal: any) => {
       if (!dateVal) return undefined;
       try {
@@ -2193,7 +2229,9 @@ export const saveSalesReceipt = async (receiptData: Partial<SalesReceipt>): Prom
 
     const response = await salesReceiptsAPI.create(apiData);
     if (response && response.success && response.data) {
-      return response.data;
+      const normalized = await normalizeSavedReceipt(response);
+      if (normalized.id) return normalized;
+      return normalized;
     }
     throw new Error((response as any)?.message || (response as any)?.error || "Failed to save sales receipt");
   } catch (error) {
@@ -2204,6 +2242,25 @@ export const saveSalesReceipt = async (receiptData: Partial<SalesReceipt>): Prom
 
 export const updateSalesReceipt = async (receiptId: string, receiptData: Partial<SalesReceipt>): Promise<SalesReceipt> => {
   try {
+    const normalizeSavedReceipt = async (response: any) => {
+      const payload = response?.data?.data ?? response?.data ?? response?.result ?? response ?? {};
+      let id = String(
+        payload?.id ||
+        payload?._id ||
+        payload?.receiptId ||
+        payload?.salesReceiptId ||
+        payload?.documentId ||
+        payload?.uuid ||
+        receiptId ||
+        ""
+      ).trim();
+      return {
+        ...payload,
+        id,
+        _id: id,
+      };
+    };
+
     const toISO = (dateVal: any) => {
       if (!dateVal) return undefined;
       try {
@@ -2249,7 +2306,9 @@ export const updateSalesReceipt = async (receiptId: string, receiptData: Partial
 
     const response = await salesReceiptsAPI.update(receiptId, apiData);
     if (response && response.success && response.data) {
-      return response.data;
+      const normalized = await normalizeSavedReceipt(response);
+      if (normalized.id) return normalized;
+      return normalized;
     }
     throw new Error((response as any)?.message || (response as any)?.error || "Failed to update sales receipt");
   } catch (error) {

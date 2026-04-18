@@ -3034,14 +3034,39 @@ export const salesReceiptsAPI = {
   },
   getNextNumber: async () => {
     try {
-      const txRes: any = await transactionNumberSeriesAPI.getNextNumber({ module: "Sales Receipt", reserve: false });
+      const res = await request({ path: "/sales-receipts/next-number", skipCache: true });
+      if (res?.success) {
+        const nextNumber =
+          res?.data?.nextNumber ||
+          res?.data?.next_number ||
+          res?.data?.receiptNumber ||
+          res?.nextNumber ||
+          "";
+        if (nextNumber) {
+          const normalized = String(nextNumber).trim().replace(/[^A-Za-z0-9]/g, "");
+          return {
+            success: true,
+            data: {
+              nextNumber: normalized,
+              next_number: normalized,
+              receiptNumber: normalized,
+              nextReceiptNumber: normalized,
+            },
+          };
+        }
+      }
+    } catch {
+      // fall back
+    }
+    try {
+      const txRes: any = await transactionNumberSeriesAPI.getNextNumber({ moduleKey: "sales_receipt", reserve: false });
       const nextNumber =
         txRes?.data?.nextNumber ||
         txRes?.data?.next_number ||
         txRes?.data?.receiptNumber ||
         txRes?.nextNumber;
       if (nextNumber) {
-        const normalized = String(nextNumber).trim();
+        const normalized = String(nextNumber).trim().replace(/[^A-Za-z0-9]/g, "");
         return {
           success: true,
           data: {
@@ -3053,12 +3078,6 @@ export const salesReceiptsAPI = {
           },
         };
       }
-    } catch {
-      // fall back
-    }
-    try {
-      const res = await request({ path: "/sales-receipts/next-number" });
-      if (res?.success) return res as any;
     } catch {}
     const all = await salesReceiptsLocal.getAll({ limit: 100000 });
     const next = (all.pagination?.total || 0) + 1;

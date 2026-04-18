@@ -36,7 +36,12 @@ export const useQuoteDetailCommunicationActions = (ctx: any) => {
   const handleSendEmail = () => {
     setShowMailDropdown(false);
     if (!quote) return;
-    navigate(`/sales/quotes/${quoteId}/email`);
+    navigate(`/sales/quotes/${quoteId}/email`, {
+      state: {
+        preloadedQuote: quote,
+        customerEmail: String(quote.customerEmail || quote.customer?.email || quote.customer?.primaryEmail || "").trim(),
+      },
+    });
   };
 
   const handleViewQuoteInNewPage = () => {

@@ -938,11 +938,15 @@ const handleCancelNewItem = () => {
   setNewItemErrors({});
   setNewItemData({
     name: "",
+    sku: "",
     sellingPrice: "",
     type: "Goods",
     unit: "",
     salesTax: "",
+    salesAccount: "",
+    purchaseAccount: "",
     description: "",
+    salesDescription: "",
   });
   setNewItemImage(null);
   setIsNewItemModalOpen(false);
@@ -1090,7 +1094,70 @@ const handleSaveNewItem = async () => {
   setNewItemErrors(errors);
   if (Object.keys(errors).length > 0) return;
 
-  setIsNewItemModalOpen(false);
+  try {
+    const payload = {
+      name: String(newItemData.name || "").trim(),
+      sku: String(newItemData.sku || "").trim(),
+      unit: String(newItemData.unit || "").trim(),
+      rate: Number(newItemData.sellingPrice || 0) || 0,
+      sellingPrice: Number(newItemData.sellingPrice || 0) || 0,
+      description: String(newItemData.description || "").trim(),
+      salesDescription: String(newItemData.description || "").trim(),
+      product_type: String(newItemData.type || "goods").toLowerCase() === "service" ? "service" : "goods",
+      type: String(newItemData.type || "Goods"),
+      active: true,
+      isActive: true,
+      status: "Active",
+    };
+
+    const response = await itemsAPI.create(payload);
+    if (response && "success" in response && response.success === false) {
+      throw new Error((response as any).message || "Failed to save item");
+    }
+
+    const savedItem = response?.data || response;
+    const normalizedItem = {
+      ...savedItem,
+      id: String(savedItem?.id || savedItem?._id || savedItem?.item_id || `item-${Date.now()}`),
+      _id: String(savedItem?.id || savedItem?._id || savedItem?.item_id || `item-${Date.now()}`),
+      name: String(savedItem?.name || payload.name),
+      sku: String(savedItem?.sku || payload.sku),
+      unit: String(savedItem?.unit || payload.unit),
+      rate: Number(savedItem?.rate ?? savedItem?.sellingPrice ?? payload.rate) || 0,
+      sellingPrice: Number(savedItem?.sellingPrice ?? savedItem?.rate ?? payload.rate) || 0,
+      description: String(savedItem?.description || savedItem?.salesDescription || payload.description || ""),
+      salesDescription: String(savedItem?.salesDescription || savedItem?.description || payload.description || ""),
+      type: String(savedItem?.type || payload.type),
+      product_type: String(savedItem?.product_type || payload.product_type),
+      active: savedItem?.active !== undefined ? savedItem.active : true,
+      isActive: savedItem?.isActive !== undefined ? savedItem.isActive : true,
+      status: String(savedItem?.status || "Active"),
+    };
+
+    setAvailableItems((prev) => {
+      const next = prev.filter((item) => String(item.id || item._id) !== String(normalizedItem.id || normalizedItem._id));
+      return [normalizedItem, ...next];
+    });
+
+    setIsNewItemModalOpen(false);
+    setNewItemErrors({});
+    setNewItemData({
+      name: "",
+      sku: "",
+      sellingPrice: "",
+      type: "Goods",
+      unit: "",
+      salesAccount: "",
+      purchaseAccount: "",
+      salesTax: "",
+      description: "",
+      salesDescription: "",
+    });
+    toast.success("Item saved to database");
+  } catch (error: any) {
+    console.error("Error saving item:", error);
+    toast.error(`Error saving item: ${error?.message || "Unknown error"}`);
+  }
 };
 const handleSaveNewTax = asyncNoop;
 const handleTaxSelect = (itemId: number | string, taxId: string) => {

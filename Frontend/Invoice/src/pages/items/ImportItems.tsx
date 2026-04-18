@@ -5,8 +5,6 @@ import { getAllDocuments } from "../../utils/documentStorage";
 import { itemsAPI, accountantAPI } from "../../services/api";
 import { toast } from "react-toastify";
 
-const ITEMS_KEY = "inv_items_v1";
-
 interface Item {
   id: string;
   name: string;
@@ -38,24 +36,6 @@ interface Document {
   associatedTo?: string;
   [key: string]: any;
 }
-
-// Helper functions for localStorage
-const getLS = (k: string) => {
-  if (typeof window !== "undefined" && window.localStorage) {
-    return window.localStorage.getItem(k);
-  }
-  return null;
-};
-
-const setLS = (k: string, v: string) => {
-  if (typeof window !== "undefined" && window.localStorage) {
-    window.localStorage.setItem(k, v);
-  }
-};
-
-const uid = () => {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2);
-};
 
 export default function ImportItems() {
   const navigate = useNavigate();
@@ -664,10 +644,7 @@ export default function ImportItems() {
         toast(`${skippedCount} record(s) skipped`, { icon: 'ℹ️' });
       }
 
-      // 3. Clear localStorage cache to force refresh if needed (though ItemsPage uses API)
-      // localStorage.removeItem(ITEMS_KEY);
-
-      // 4. Final navigation
+      // 3. Final navigation
       navigate("/products/items");
 
     } catch (error) {

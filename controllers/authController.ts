@@ -372,7 +372,7 @@ export const signup = async (req: express.Request, res: express.Response) => {
       try {
         const modules = [
           { module: "invoice", prefix: "INV-", seriesName: "Default", startingNumber: "1000", nextNumber: 1000, isDefault: true },
-          { module: "salesreciept", prefix: "SR-", seriesName: "Default", startingNumber: "1000", nextNumber: 1000 },
+          { module: "sales_receipt", prefix: "SR-", seriesName: "Default", startingNumber: "1000", nextNumber: 1000 },
         ];
         await TransactionNumberSeries.insertMany(
           modules.map((mod) => ({

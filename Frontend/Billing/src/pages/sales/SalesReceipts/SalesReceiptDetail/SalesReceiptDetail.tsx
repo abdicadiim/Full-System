@@ -322,13 +322,7 @@ export default function SalesReceiptDetail() {
     { account: salesAccount, debit: 0, credit: receipt?.subTotal || receipt?.total || 0 },
   ];
 
-  const receiptItems = Array.isArray(receipt?.items)
-    ? receipt.items
-    : Array.isArray((receipt as any)?.lineItems)
-      ? (receipt as any).lineItems
-      : Array.isArray((receipt as any)?.line_items)
-        ? (receipt as any).line_items
-        : [];
+  const receiptItems = normalizeReceiptItems(receipt);
 
   // If items have cost, add Cost of Goods Sold entries
   if (receiptItems.length > 0) {
@@ -600,6 +594,59 @@ ${sellerInfo.name}`
     if (typeof value === "string" || typeof value === "number") return String(value);
     if (typeof value === "object") return String(value._id || value.id || "");
     return "";
+  };
+
+  const normalizeReceiptItems = (source: any) => {
+    const rawItems =
+      source?.items ||
+      source?.lineItems ||
+      source?.line_items ||
+      source?.receiptItems ||
+      source?.itemDetails ||
+      [];
+
+    const itemsArray = Array.isArray(rawItems)
+      ? rawItems
+      : rawItems && typeof rawItems === "object"
+        ? [rawItems]
+        : [];
+
+    return itemsArray
+      .map((line: any, index: number) => {
+        const quantity = toFiniteNumber(line?.quantity ?? line?.qty ?? 0, 0);
+        const unitPrice = toFiniteNumber(line?.unitPrice ?? line?.rate ?? line?.price ?? 0, 0);
+        const amount = toFiniteNumber(line?.total ?? line?.amount ?? quantity * unitPrice, 0);
+        const name = String(
+          line?.name ||
+          line?.itemDetails ||
+          line?.description ||
+          line?.itemName ||
+          line?.productName ||
+          line?.label ||
+          "Item"
+        ).trim();
+
+        return {
+          id: String(line?.id || line?._id || line?.itemId || index),
+          name,
+          itemDetails: name,
+          description: String(line?.description || line?.itemDescription || ""),
+          quantity,
+          unitPrice,
+          rate: unitPrice,
+          total: amount,
+          amount,
+          unit: String(line?.unit || line?.uom || ""),
+          cost: toFiniteNumber(line?.cost, 0),
+          discount: toFiniteNumber(line?.discount, 0),
+          discountType: String(line?.discountType || "percent"),
+          tax: line?.tax || "",
+          taxId: line?.taxId || line?.tax_id || "",
+          taxRate: toFiniteNumber(line?.taxRate ?? line?.taxPercent ?? line?.tax_percentage, 0),
+          taxAmount: toFiniteNumber(line?.taxAmount ?? 0, 0),
+        };
+      })
+      .filter((line: any) => line.name || line.description || line.quantity || line.unitPrice || line.amount);
   };
 
   const handleVoid = () => {

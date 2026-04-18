@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { toast } from "react-toastify";
 import { formatSalesReceiptNumber, getSalesReceiptById } from "../../salesModel";
 import { salesReceiptsAPI, senderEmailsAPI, contactPersonsAPI } from "../../../services/api";
 import { X, Bold, Italic, Underline, Strikethrough, Link as LinkIcon, Image as ImageIcon, Paperclip, Loader2, Search, Plus } from "lucide-react";
@@ -252,11 +253,11 @@ export default function SendSalesReceiptEmail() {
         : String(receiptData?.id || receiptData?._id || "").trim();
 
     if (!effectiveReceiptId) {
-      alert("Sales receipt ID is missing.");
+      toast.error("Sales receipt ID is missing.");
       return;
     }
     if (!String(emailData.to || "").trim()) {
-      alert("Please enter recipient email.");
+      toast.error("Please enter recipient email.");
       return;
     }
 
@@ -275,11 +276,11 @@ export default function SendSalesReceiptEmail() {
         attachSystemPDF: emailData.attachPDF
       });
 
-      alert("Email sent successfully.");
+      toast.success("Email sent successfully.");
       navigate(`/sales/sales-receipts/${effectiveReceiptId}`);
     } catch (error) {
       console.error("Error sending sales receipt email:", error);
-      alert("Failed to send email. Please try again.");
+      toast.error("Failed to send email. Please try again.");
     } finally {
       setIsSending(false);
     }
@@ -291,7 +292,7 @@ export default function SendSalesReceiptEmail() {
 
   const handleSaveAndSelectContact = async () => {
     if (!String(newContact.firstName || "").trim() || !String(newContact.email || "").trim()) {
-      alert("First Name and Email Address are required.");
+      toast.error("First Name and Email Address are required.");
       return;
     }
 
@@ -304,7 +305,7 @@ export default function SendSalesReceiptEmail() {
     ).trim();
 
     if (!customerId) {
-      alert("Customer ID not found.");
+      toast.error("Customer ID not found.");
       return;
     }
 
@@ -352,7 +353,7 @@ export default function SendSalesReceiptEmail() {
       });
     } catch (error) {
       console.error("Failed to save contact person from sales receipt email:", error);
-      alert("Failed to add contact person.");
+      toast.error("Failed to add contact person.");
     } finally {
       setIsSavingContact(false);
     }

@@ -619,7 +619,7 @@ export function useNewQuoteItemActions(controller: any) {
     }
   };
 
-  const handleSaveNewItem = () => {
+  const handleSaveNewItem = async () => {
     if (!newItemData.name.trim()) {
       toast.error("Please enter item name");
       return;
@@ -629,48 +629,55 @@ export function useNewQuoteItemActions(controller: any) {
       return;
     }
 
-    // Create new item
-    const newItem = {
-      id: `ITEM-${Date.now()}`,
-      entityType: "item",
-      name: newItemData.name,
-      sku: newItemData.sku,
-      code: newItemData.sku,
-      rate: parseFloat(newItemData.sellingPrice) || 0,
-      stockOnHand: 0,
-      unit: newItemData.unit || "pcs",
-      type: newItemData.type,
-      costPrice: parseFloat(newItemData.costPrice) || 0,
-      salesAccount: newItemData.salesAccount,
-      purchaseAccount: newItemData.purchaseAccount,
-      sellable: newItemData.sellable,
-      purchasable: newItemData.purchasable,
-      trackInventory: newItemData.trackInventory,
-      description: newItemData.salesDescription || ""
-    };
+    try {
+      const payload = {
+        name: newItemData.name.trim(),
+        sku: newItemData.sku?.trim() || "",
+        unit: newItemData.unit || "pcs",
+        rate: parseFloat(newItemData.sellingPrice) || 0,
+        sellingPrice: parseFloat(newItemData.sellingPrice) || 0,
+        description: newItemData.salesDescription || "",
+        salesDescription: newItemData.salesDescription || "",
+        product_type: String(newItemData.type || "Goods").toLowerCase() === "service" ? "service" : "goods",
+        type: newItemData.type,
+        active: true,
+        isActive: true,
+        status: "Active",
+      };
 
-    // Add to availableItems
-    setAvailableItems(prev => [...prev, newItem]);
+      const response = await itemsAPI.create(payload);
+      if (response && "success" in response && response.success === false) {
+        throw new Error((response as any).message || "Failed to save item");
+      }
 
-    // Also save to localStorage
-    const savedItems = JSON.parse(localStorage.getItem("inv_items_v1") || "[]");
-    const itemToSave = {
-      id: newItem.id,
-      name: newItem.name,
-      sku: newItem.sku,
-      sellingPrice: newItem.rate,
-      costPrice: newItem.costPrice || 0,
-      stockOnHand: newItem.stockOnHand || 0,
-      unit: newItem.unit,
-      type: newItem.type,
-      salesAccount: newItemData.salesAccount,
-      purchaseAccount: newItemData.purchaseAccount,
-      sellable: newItemData.sellable,
-      purchasable: newItemData.purchasable,
-      trackInventory: newItemData.trackInventory
-    };
-    savedItems.push(itemToSave);
-    localStorage.setItem("inv_items_v1", JSON.stringify(savedItems));
+      const savedItem = response?.data || response;
+      const newItem = {
+        ...savedItem,
+        entityType: "item",
+        id: String(savedItem?.id || savedItem?._id || `ITEM-${Date.now()}`),
+        sourceId: String(savedItem?.id || savedItem?._id || `ITEM-${Date.now()}`),
+        name: String(savedItem?.name || payload.name),
+        sku: String(savedItem?.sku || payload.sku),
+        code: String(savedItem?.sku || payload.sku),
+        rate: Number(savedItem?.rate ?? savedItem?.sellingPrice ?? payload.rate) || 0,
+        stockOnHand: Number(savedItem?.stockOnHand ?? 0) || 0,
+        unit: String(savedItem?.unit || payload.unit),
+        type: String(savedItem?.type || payload.type),
+        costPrice: Number(savedItem?.costPrice ?? newItemData.costPrice ?? 0) || 0,
+        salesAccount: newItemData.salesAccount,
+        purchaseAccount: newItemData.purchaseAccount,
+        sellable: newItemData.sellable,
+        purchasable: newItemData.purchasable,
+        trackInventory: newItemData.trackInventory,
+        description: String(savedItem?.description || savedItem?.salesDescription || payload.description || ""),
+      };
+
+      setAvailableItems(prev => [...prev.filter((item) => String(item.id || item._id) !== String(newItem.id)), newItem]);
+    } catch (error: any) {
+      console.error("Failed to save item:", error);
+      toast.error("Failed to save item: " + (error?.message || "Unknown error"));
+      return;
+    }
 
     // Reset form and close modal
     setNewItemData({

@@ -34,7 +34,16 @@ const requireOrgId = (req: express.Request, res: express.Response) => {
   return orgId;
 };
 
-const normalizeRow = (row: any) => (row ? { ...row, id: String(row._id) } : row);
+const normalizeRow = (row: any) => {
+  if (!row) return row;
+  const id = String(row?._id || row?.id || row?.receiptId || "").trim();
+  return {
+    ...row,
+    id,
+    _id: id,
+    receiptId: id,
+  };
+};
 
 const pickSmtpSender = async (organizationId: any) => {
   const primary: any = await SenderEmail.findOne({
@@ -141,7 +150,8 @@ export const createSalesReceipt: express.RequestHandler = async (req, res) => {
     };
 
     const created = await SalesReceipt.create(payload);
-    return res.status(201).json({ success: true, data: normalizeRow(created.toObject()) });
+    const saved = await SalesReceipt.findById(created._id).lean();
+    return res.status(201).json({ success: true, data: normalizeRow(saved || created.toObject()) });
   } catch (error: any) {
     const msg = String(error?.message || "");
     if (msg.toLowerCase().includes("duplicate") || msg.toLowerCase().includes("exists")) {
